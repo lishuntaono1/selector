@@ -6,7 +6,7 @@ const (
 	LexComma      LexKind = iota //= ','
 	LexSlash                     // '/',
 	LexAt                        //'@',
-	LexDotKind                   // '.',
+	LexDot                       // '.',
 	LexLParens                   // '(',
 	LexRParens                   // ')',
 	LexLBracket                  // '[',
