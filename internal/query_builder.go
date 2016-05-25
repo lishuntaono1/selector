@@ -1,69 +1,70 @@
 package internal
 
-import "golang.org/x/net/html"
+import "fmt"
 
-func Build(query string) Query {
+func CompileXPathQuery(query string) Query {
 	root := ParseXPathExpression(query)
-	return processNode(root, &funcQuery{
-		selector:  func(n *html.Node) bool { return true },
-		evaluator: func(n *html.Node) interface{} { return nil },
-	})
+	builder := &QueryBuilder{}
+	return builder.ProcessNode(root)
 }
 
-func processNode(root AstNode, a Query) Query {
-	var q Query
+type QueryBuilder struct {
+	depth int
+}
+
+func (b *QueryBuilder) ProcessNode(root AstNode) Query {
+	if b.depth = b.depth + 1; b.depth > 1024 {
+		panic("The xpath query is too complex.")
+	}
+	var result Query
 	switch root.Type() {
 	case AstAxis:
-		q = processAxis(root.(*Axis), a)
+		result = b.ProcessAxis(root.(*Axis))
+	case AstOperator:
+		result = b.ProcessOperator(root.(*Operator))
 	}
-	return q
+	b.depth--
+	return result
 }
 
-func processAxis(root *Axis, a Query) Query {
-	var q Query
+func (b *QueryBuilder) ProcessAxis(root *Axis) Query {
+	var qyInput Query
+	if root.input != nil {
+		qyInput = b.ProcessNode(root.input)
+	}
+	var result Query
+
 	switch root.axis_type {
 	case AxisAncestor:
-		{
-			q = &funcQuery{selector: func(n *html.Node) bool {
-				for parent := n.Parent; parent != nil; parent = parent.Parent {
-					if a.Select(parent) {
-						return true
-					}
-				}
-				return false
-			}}
-		}
+		result = &AncestorQuery{qyInput: qyInput, name: root.name, prefix: root.prefix, typeTest: root.node_type}
 	case AxisAncestorOrSelf:
-		{
-			q = &funcQuery{selector: func(n *html.Node) bool {
-				if !a.Select(n) {
-					return false
-				}
-				for parent := n.Parent; parent != nil; parent = parent.Parent {
-					if a.Select(parent) {
-						return true
-					}
-				}
-				return false
-			}}
-		}
+		result = &AncestorQuery{qyInput: qyInput, name: root.name, prefix: root.prefix, typeTest: root.node_type, matchSelf: true}
 	case AxisAttribute:
-		{
-			q = &funcQuery{selector: func(n *html.Node) bool {
-				if n.Type != html.ElementNode {
-					return false
-				}
-				for _, attr := range n.Attr {
-					if attr.Key == root.name && attr.Namespace == root.prefix {
-						return true
-					}
-				}
-				return false
-			},evaluator:func(n *html.Node) interface{}}
-		}
+		result = &AttributeQuery{qyInput: qyInput, name: root.name, prefix: root.prefix, typeTest: root.node_type}
+	case AxisChild:
+		result = &ChildQuery{qyInput: qyInput, name: root.name, prefix: root.prefix, typeTest: root.node_type}
+	case AxisDescendant:
+		result = &DescendantQuery{qyInput: qyInput, name: root.name, prefix: root.prefix, typeTest: root.node_type}
+	case AxisDescendantOrSelf:
+		result = &DescendantQuery{qyInput: qyInput, name: root.name, prefix: root.prefix, typeTest: root.node_type, matchSelf: true}
+	default:
+		panic(fmt.Sprintf("Axis type[%d] not implemented.", root.axis_type))
 	}
-	if root.input != nil {
-		q = processNode(root.input, q)
+	return result
+}
+
+func (b *QueryBuilder) ProcessOperator(root *Operator) Query {
+	var op1 = b.ProcessNode(root.opnd1)
+	var op2 = b.ProcessNode(root.opnd2)
+
+	switch root.op {
+	case OpPLUS, OpMINUS, OpMUL, OpMOD, OpDIV:
+		return &NumericExpr{root.op, op1, op2}
+	case OpLT, OpGT, OpLE, OpGE, OpEQ, OpNE:
+		// LogicalExpr
+	case OpOR, OpAND:
+	// BooleanExpr
+	case OpUNION:
+		// UnionExpr
 	}
-	return q
 }

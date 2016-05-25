@@ -3,47 +3,56 @@ package internal
 import (
 	"fmt"
 	"reflect"
+
+	"github.com/zhengchun/selector/xpath"
 )
 
-type Parser struct {
-	s *Scanner
-	d int
+type XPathParser struct {
+	scanner *XPathScanner
+	depth   int
 }
 
 //
 func ParseXPathExpression(expr string) AstNode {
-	p := &Parser{s: newScanner(expr)}
-	if n := p.parseExpression(nil); p.s.kind != LexEof {
-		panic(fmt.Sprintf("%s has an invalid token.", expr))
+	p := newXPathParser(expr)
+	if n := p.parseExpression(nil); p.scanner.kind != LexEof {
+		panic(fmt.Sprintf("%s has an invalid token.", p.scanner.expr))
 	} else {
 		return n
 	}
 }
 
 func ParseXPathPattern(pattern string) AstNode {
-	p := &Parser{s: newScanner(pattern)}
-	if n := p.parsePattern(); p.s.kind != LexEof {
-		panic(fmt.Sprintf("%s has an invalid token.", pattern))
+	p := newXPathParser(pattern)
+	if n := p.parsePattern(); p.scanner.kind != LexEof {
+		panic(fmt.Sprintf("%s has an invalid token.", p.scanner.expr))
 	} else {
 		return n
 	}
 }
 
+func newXPathParser(q string) *XPathParser {
+	s := &XPathScanner{expr: q}
+	s.NextChar()
+	s.NextLex()
+	return &XPathParser{s, 0}
+}
+
 // --------------- Expression Parsing ----------------------
 
-func (p *Parser) parseExpression(qyInput AstNode) AstNode {
+func (p *XPathParser) parseExpression(qyInput AstNode) AstNode {
 	//ParseOrExpr->ParseAndExpr->ParseEqualityExpr->ParseRelationalExpr...->ParseFilterExpr->ParsePredicate->ParseExpression
 	//So put 200 limitation here will max cause about 2000~3000 depth stack.
-	if p.d = p.d + 1; p.d > 200 {
+	if p.depth = p.depth + 1; p.depth > 200 {
 		panic("The xpath query is too complex.")
 	}
 	n := p.parseOrExpr(qyInput)
-	p.d--
+	p.depth--
 	return n
 }
 
 // >> OrExpr ::= ( OrExpr 'or' )? AndExpr
-func (p *Parser) parseOrExpr(qyInput AstNode) AstNode {
+func (p *XPathParser) parseOrExpr(qyInput AstNode) AstNode {
 	opnd := p.parseAndExpr(qyInput)
 	for {
 		if !p.testOp("or") {
@@ -55,7 +64,7 @@ func (p *Parser) parseOrExpr(qyInput AstNode) AstNode {
 }
 
 //>> AndExpr ::= ( AndExpr 'and' )? EqualityExpr
-func (p *Parser) parseAndExpr(qyInput AstNode) AstNode {
+func (p *XPathParser) parseAndExpr(qyInput AstNode) AstNode {
 	opnd := p.parseEqualityExpr(qyInput)
 	for {
 		if !p.testOp("and") {
@@ -68,12 +77,12 @@ func (p *Parser) parseAndExpr(qyInput AstNode) AstNode {
 
 //>> EqualityOp ::= '=' | '!='
 //>> EqualityExpr    ::= ( EqualityExpr EqualityOp )? RelationalExpr
-func (p *Parser) parseEqualityExpr(qyInput AstNode) AstNode {
+func (p *XPathParser) parseEqualityExpr(qyInput AstNode) AstNode {
 	opnd := p.parseRelationalExpr(qyInput)
 	for {
 		var op OpType = OpINVALID
 
-		switch p.s.kind {
+		switch p.scanner.kind {
 		case LexEq:
 			op = OpEQ
 		case LexNe:
@@ -89,12 +98,12 @@ func (p *Parser) parseEqualityExpr(qyInput AstNode) AstNode {
 
 //>> RelationalOp ::= '<' | '>' | '<=' | '>='
 //>> RelationalExpr    ::= ( RelationalExpr RelationalOp )? AdditiveExpr
-func (p *Parser) parseRelationalExpr(qyInput AstNode) AstNode {
+func (p *XPathParser) parseRelationalExpr(qyInput AstNode) AstNode {
 	opnd := p.parseAdditiveExpr(qyInput)
 	for {
 		var op OpType = OpINVALID
 
-		switch p.s.kind {
+		switch p.scanner.kind {
 		case LexLt:
 			op = OpLT
 		case LexLe:
@@ -114,14 +123,14 @@ func (p *Parser) parseRelationalExpr(qyInput AstNode) AstNode {
 
 //>> AdditiveOp   ::= '+' | '-'
 //>> AdditiveExpr ::= ( AdditiveExpr AdditiveOp )? MultiplicativeExpr
-func (p *Parser) parseAdditiveExpr(qyInput AstNode) AstNode {
+func (p *XPathParser) parseAdditiveExpr(qyInput AstNode) AstNode {
 	opnd := p.parseMultiplicativeExpr(qyInput)
 	for {
 		var op OpType = OpINVALID
 
-		if p.s.kind == LexPlus {
+		if p.scanner.kind == LexPlus {
 			op = OpPLUS
-		} else if p.s.kind == LexMinus {
+		} else if p.scanner.kind == LexMinus {
 			op = OpMINUS
 		}
 		if op == OpINVALID {
@@ -134,11 +143,11 @@ func (p *Parser) parseAdditiveExpr(qyInput AstNode) AstNode {
 
 //>> MultiplicativeOp   ::= '*' | 'div' | 'mod'
 //>> MultiplicativeExpr ::= ( MultiplicativeExpr MultiplicativeOp )? UnaryExpr
-func (p *Parser) parseMultiplicativeExpr(qyInput AstNode) AstNode {
+func (p *XPathParser) parseMultiplicativeExpr(qyInput AstNode) AstNode {
 	opnd := p.parseUnaryExpr(qyInput)
 	for {
 		var op OpType = OpINVALID
-		if p.s.kind == LexStar {
+		if p.scanner.kind == LexStar {
 			op = OpMUL
 		} else {
 			if p.testOp("div") {
@@ -156,9 +165,9 @@ func (p *Parser) parseMultiplicativeExpr(qyInput AstNode) AstNode {
 }
 
 //>> UnaryExpr    ::= UnionExpr | '-' UnaryExpr
-func (p *Parser) parseUnaryExpr(qyInput AstNode) AstNode {
+func (p *XPathParser) parseUnaryExpr(qyInput AstNode) AstNode {
 	minus := false
-	for p.s.kind == LexMinus {
+	for p.scanner.kind == LexMinus {
 		p.nextLex()
 		minus = !minus
 	}
@@ -170,10 +179,10 @@ func (p *Parser) parseUnaryExpr(qyInput AstNode) AstNode {
 }
 
 //>> UnionExpr ::= ( UnionExpr '|' )? PathExpr
-func (p *Parser) parseUnionExpr(qyInput AstNode) AstNode {
+func (p *XPathParser) parseUnionExpr(qyInput AstNode) AstNode {
 	opnd := p.parsePathExpr(qyInput)
 	for {
-		if p.s.kind != LexUnion {
+		if p.scanner.kind != LexUnion {
 			return opnd
 		}
 		p.nextLex()
@@ -187,20 +196,20 @@ func (p *Parser) parseUnionExpr(qyInput AstNode) AstNode {
 //>> PathOp   ::= '/' | '//'
 //>> PathExpr ::= LocationPath |
 //>>              FilterExpr ( PathOp  RelativeLocationPath )?
-func (p *Parser) parsePathExpr(qyInput AstNode) AstNode {
+func (p *XPathParser) parsePathExpr(qyInput AstNode) AstNode {
 	var opnd AstNode
-	if isPrimaryExpr(p.s) {
+	if isPrimaryExpr(p.scanner) {
 		opnd = p.parseFilterExpr(qyInput)
-		if p.s.kind == LexSlash {
+		if p.scanner.kind == LexSlash {
 			p.nextLex()
 			opnd = p.parseRelativeLocationPath(opnd)
-		} else if p.s.kind == LexSlashSlash {
+		} else if p.scanner.kind == LexSlashSlash {
 			p.nextLex()
 			opnd = p.parseRelativeLocationPath(&Axis{
 				abbr:      true,
 				input:     opnd,
 				axis_type: AxisDescendantOrSelf,
-				node_type: NodeAll,
+				node_type: xpath.AllNode,
 			})
 		}
 	} else {
@@ -210,9 +219,9 @@ func (p *Parser) parsePathExpr(qyInput AstNode) AstNode {
 }
 
 //>> FilterExpr ::= PrimaryExpr | FilterExpr Predicate
-func (p *Parser) parseFilterExpr(qyInput AstNode) AstNode {
+func (p *XPathParser) parseFilterExpr(qyInput AstNode) AstNode {
 	opnd := p.parsePrimaryExpr(qyInput)
-	for p.s.kind == LexLBracket {
+	for p.scanner.kind == LexLBracket {
 		// opnd must be a query
 		opnd = &Filter{opnd, p.parsePredicate(opnd)}
 	}
@@ -220,7 +229,7 @@ func (p *Parser) parseFilterExpr(qyInput AstNode) AstNode {
 }
 
 //>> Predicate ::= '[' Expr ']'
-func (p *Parser) parsePredicate(qyInput AstNode) AstNode {
+func (p *XPathParser) parsePredicate(qyInput AstNode) AstNode {
 	var opnd AstNode
 	// we have predicates. Check that input type is NodeSet
 	checkNodeSet(qyInput.ReturnType())
@@ -231,22 +240,22 @@ func (p *Parser) parsePredicate(qyInput AstNode) AstNode {
 }
 
 //>> LocationPath ::= RelativeLocationPath | AbsoluteLocationPath
-func (p *Parser) parseLocationPath(qyInput AstNode) AstNode {
-	if p.s.kind == LexSlash {
+func (p *XPathParser) parseLocationPath(qyInput AstNode) AstNode {
+	if p.scanner.kind == LexSlash {
 		p.nextLex()
 		var opnd AstNode
 		opnd = &Root{}
-		if isStep(p.s.kind) {
+		if isStep(p.scanner.kind) {
 			opnd = p.parseRelativeLocationPath(opnd)
 		}
 		return opnd
-	} else if p.s.kind == LexSlashSlash {
+	} else if p.scanner.kind == LexSlashSlash {
 		p.nextLex()
 		return p.parseRelativeLocationPath(&Axis{
 			abbr:      true,
 			input:     &Root{},
 			axis_type: AxisDescendantOrSelf,
-			node_type: NodeAll,
+			node_type: xpath.AllNode,
 		})
 	} else {
 		return p.parseRelativeLocationPath(qyInput)
@@ -255,19 +264,19 @@ func (p *Parser) parseLocationPath(qyInput AstNode) AstNode {
 
 //>> PathOp   ::= '/' | '//'
 //>> RelativeLocationPath ::= ( RelativeLocationPath PathOp )? Step
-func (p *Parser) parseRelativeLocationPath(qyInput AstNode) AstNode {
+func (p *XPathParser) parseRelativeLocationPath(qyInput AstNode) AstNode {
 	opnd := qyInput
 	for {
 		opnd = p.parseStep(opnd)
-		if p.s.kind == LexSlashSlash {
+		if p.scanner.kind == LexSlashSlash {
 			p.nextLex()
 			opnd = &Axis{
 				abbr:      true,
 				input:     opnd,
 				axis_type: AxisDescendantOrSelf,
-				node_type: NodeAll,
+				node_type: xpath.AllNode,
 			}
-		} else if p.s.kind == LexSlash {
+		} else if p.scanner.kind == LexSlash {
 			p.nextLex()
 		} else {
 			break
@@ -277,27 +286,27 @@ func (p *Parser) parseRelativeLocationPath(qyInput AstNode) AstNode {
 }
 
 //>> Step ::= '.' | '..' | ( AxisName '::' | '@' )? NodeTest Predicate*
-func (p *Parser) parseStep(qyInput AstNode) AstNode {
+func (p *XPathParser) parseStep(qyInput AstNode) AstNode {
 	var opnd AstNode
-	if p.s.kind == LexDot { //>> '.'
+	if p.scanner.kind == LexDot { //>> '.'
 		p.nextLex()
 		opnd = &Axis{
 			abbr:      true,
 			input:     qyInput,
 			axis_type: AxisSelf,
-			node_type: NodeAll,
+			node_type: xpath.AllNode,
 		}
-	} else if p.s.kind == LexDotDot { //>> '..'
+	} else if p.scanner.kind == LexDotDot { //>> '..'
 		p.nextLex()
 		opnd = &Axis{
 			abbr:      true,
 			input:     qyInput,
 			axis_type: AxisParent,
-			node_type: NodeAll,
+			node_type: xpath.AllNode,
 		}
 	} else { //>> ( AxisName '::' | '@' )? NodeTest Predicate*
 		axisType := AxisChild
-		switch p.s.kind {
+		switch p.scanner.kind {
 		case LexAt: //>> '@'
 			axisType = AxisAttribute
 			p.nextLex()
@@ -305,13 +314,13 @@ func (p *Parser) parseStep(qyInput AstNode) AstNode {
 			axisType = p.getAxis()
 			p.nextLex()
 		}
-		nodeType := NodeElement
+		nodeType := xpath.ElementNode
 		if axisType == AxisAttribute {
-			nodeType = NodeAttribute
+			nodeType = xpath.AttributeNode
 		}
 
 		opnd = p.parseNodeTest(qyInput, axisType, nodeType)
-		for p.s.kind == LexLBracket {
+		for p.scanner.kind == LexLBracket {
 			opnd = &Filter{opnd, p.parsePredicate(opnd)}
 		}
 	}
@@ -319,39 +328,39 @@ func (p *Parser) parseStep(qyInput AstNode) AstNode {
 }
 
 //>> NodeTest ::= NameTest | 'comment ()' | 'text ()' | 'node ()' | 'processing-instruction ('  Literal ? ')'
-func (p *Parser) parseNodeTest(qyInput AstNode, axisType AxisType, nodeType NodeType) AstNode {
+func (p *XPathParser) parseNodeTest(qyInput AstNode, axisType AxisType, nodeType xpath.NodeType) AstNode {
 	var nodeName, nodePrefix string
-	switch p.s.kind {
+	switch p.scanner.kind {
 	case LexName:
 		{
-			if p.s.canBeFunction && isNodeType(p.s) {
+			if p.scanner.canBeFunction && isNodeType(p.scanner) {
 				nodePrefix = ""
 				nodeName = ""
-				switch p.s.name {
+				switch p.scanner.name {
 				case "comment":
-					nodeType = NodeComment
+					nodeType = xpath.CommentNode
 				case "text":
-					nodeType = NodeText
+					nodeType = xpath.TextNode
 				case "node":
-					nodeType = NodeAll
+					nodeType = xpath.AllNode
 				case "processing-instruction":
-					nodeType = NodeProcessingInstruction
+					nodeType = xpath.ProcessingInstructionNode
 				default:
-					nodeType = NodeRoot
+					nodeType = xpath.RootNode
 				}
 				p.nextLex()
 				p.passToken(LexLParens)
-				if nodeType == NodeProcessingInstruction {
-					if p.s.kind != LexRParens {
-						checkToken(p.s, LexString)
-						nodeName = p.s.strval
+				if nodeType == xpath.ProcessingInstructionNode {
+					if p.scanner.kind != LexRParens {
+						checkToken(p.scanner, LexString)
+						nodeName = p.scanner.strval
 						p.nextLex()
 					}
 				}
 				p.passToken(LexRParens)
 			} else {
-				nodePrefix = p.s.prefix
-				nodeName = p.s.name
+				nodePrefix = p.scanner.prefix
+				nodeName = p.scanner.name
 				p.nextLex()
 				if nodeName == "*" {
 					nodeName = ""
@@ -375,45 +384,45 @@ func (p *Parser) parseNodeTest(qyInput AstNode, axisType AxisType, nodeType Node
 }
 
 //>> PrimaryExpr ::= Literal | Number | VariableReference | '(' Expr ')' | FunctionCall
-func (p *Parser) parsePrimaryExpr(qyInput AstNode) AstNode {
+func (p *XPathParser) parsePrimaryExpr(qyInput AstNode) AstNode {
 	var opnd AstNode
-	switch p.s.kind {
+	switch p.scanner.kind {
 	case LexString:
-		opnd = &Operand{StringType, p.s.strval}
+		opnd = &Operand{StringType, p.scanner.strval}
 		p.nextLex()
 	case LexNumber:
-		opnd = &Operand{NumberType, p.s.numval}
+		opnd = &Operand{NumberType, p.scanner.numval}
 		p.nextLex()
 	case LexDollar:
 		p.nextLex()
-		checkToken(p.s, LexName)
-		opnd = &Variable{p.s.name, p.s.prefix}
+		checkToken(p.scanner, LexName)
+		opnd = &Variable{p.scanner.name, p.scanner.prefix}
 		p.nextLex()
 	case LexLParens:
 		p.nextLex()
 		opnd = p.parseExpression(qyInput)
-		if opnd.Type() != AstConstantOperand {
+		if opnd.Type() != ConstantOperandAst {
 			opnd = &Group{opnd}
 		}
 		p.passToken(LexRParens)
 	case LexName:
-		if p.s.canBeFunction && !isNodeType(p.s) {
+		if p.scanner.canBeFunction && !isNodeType(p.scanner) {
 			opnd = p.parseMethod(nil)
 		}
 	}
 	return opnd
 }
 
-func (p *Parser) parseMethod(qyInput AstNode) AstNode {
+func (p *XPathParser) parseMethod(qyInput AstNode) AstNode {
 	argList := make([]AstNode, 0)
-	name := p.s.name
-	prefix := p.s.prefix
+	name := p.scanner.name
+	prefix := p.scanner.prefix
 	p.passToken(LexName)
 	p.passToken(LexLParens)
-	if p.s.kind != LexRParens {
+	if p.scanner.kind != LexRParens {
 		for {
 			argList = append(argList, p.parseExpression(qyInput))
-			if p.s.kind == LexRParens {
+			if p.scanner.kind == LexRParens {
 				break
 			}
 			p.passToken(LexComma)
@@ -424,18 +433,18 @@ func (p *Parser) parseMethod(qyInput AstNode) AstNode {
 		if pi, ok := functionTable[name]; ok {
 			argCount := len(argList)
 			if argCount < pi.minargs {
-				panic(fmt.Sprintf("Function %s in %s has an invalid number of arguments.", name, p.s.expr))
+				panic(fmt.Sprintf("Function %s in %s has an invalid number of arguments.", name, p.scanner.expr))
 			}
-			if pi.funcType == FuncConcat {
+			if pi.functype == FuncConcat {
 				for i, arg := range argList {
 					if arg.ReturnType() != StringType {
-						arg = &Function{func_type: FuncString, argument: []AstNode{arg}}
+						arg = &Function{functype: FuncString, argument: []AstNode{arg}}
 					}
 					argList[i] = arg
 				}
 			} else {
 				if pi.maxargs < argCount {
-					panic(fmt.Sprintf("Function %s in %s has an invalid number of arguments.", name, p.s.expr))
+					panic(fmt.Sprintf("Function %s in %s has an invalid number of arguments.", name, p.scanner.expr))
 				}
 				if len(pi.argTypes) < argCount {
 					argCount = len(pi.argTypes) // argument we have the type specified (can be < pi.Minargs)
@@ -447,32 +456,32 @@ func (p *Parser) parseMethod(qyInput AstNode) AstNode {
 						case NodeSetType:
 							if !(reflect.TypeOf(arg) == reflect.TypeOf((*Variable)(nil))) &&
 								!(reflect.TypeOf(arg) == reflect.TypeOf((*Function)(nil)) && arg.ReturnType() == AnyType) {
-								panic(fmt.Sprintf("The argument to function %s in %s cannot be converted to a node-set.", name, p.s.expr))
+								panic(fmt.Sprintf("The argument to function %s in %s cannot be converted to a node-set.", name, p.scanner.expr))
 							}
 						case StringType:
-							arg = &Function{func_type: FuncString, argument: []AstNode{arg}}
+							arg = &Function{functype: FuncString, argument: []AstNode{arg}}
 						case NumberType:
-							arg = &Function{func_type: FuncNumber, argument: []AstNode{arg}}
+							arg = &Function{functype: FuncNumber, argument: []AstNode{arg}}
 						case BooleanType:
-							arg = &Function{func_type: FuncBoolean, argument: []AstNode{arg}}
+							arg = &Function{functype: FuncBoolean, argument: []AstNode{arg}}
 						}
 						argList[i] = arg
 					}
 				}
 			}
-			return &Function{func_type: pi.funcType, argument: argList}
+			return &Function{functype: pi.functype, argument: argList}
 		}
 	}
-	return &Function{func_type: FuncUserDefined, argument: []AstNode{}, prefix: prefix, name: name}
+	return &Function{functype: FuncUserDefined, argument: []AstNode{}, prefix: prefix, name: name}
 }
 
 // --------------- Pattern Parsing ----------------------
 
 //>> Pattern ::= ( Pattern '|' )? LocationPathPattern
-func (p *Parser) parsePattern() AstNode {
+func (p *XPathParser) parsePattern() AstNode {
 	opnd := p.parseLocationPathPattern()
 	for {
-		if p.s.kind != LexUnion {
+		if p.scanner.kind != LexUnion {
 			return opnd
 		}
 		p.nextLex()
@@ -482,13 +491,13 @@ func (p *Parser) parsePattern() AstNode {
 
 //>> LocationPathPattern ::= '/' | RelativePathPattern | '//' RelativePathPattern  |  '/' RelativePathPattern
 //>>                       | IdKeyPattern (('/' | '//') RelativePathPattern)?
-func (p *Parser) parseLocationPathPattern() AstNode {
+func (p *XPathParser) parseLocationPathPattern() AstNode {
 	var opnd AstNode
-	switch p.s.kind {
+	switch p.scanner.kind {
 	case LexSlash:
 		p.nextLex()
 		opnd = &Root{}
-		if p.s.kind == LexEof || p.s.kind == LexUnion {
+		if p.scanner.kind == LexEof || p.scanner.kind == LexUnion {
 			return opnd
 		}
 	case LexSlashSlash:
@@ -497,13 +506,13 @@ func (p *Parser) parseLocationPathPattern() AstNode {
 			input:     &Root{},
 			abbr:      true,
 			axis_type: AxisDescendantOrSelf,
-			node_type: NodeAll,
+			node_type: xpath.AllNode,
 		}
 	case LexName:
-		if p.s.canBeFunction {
+		if p.scanner.canBeFunction {
 			opnd = p.parseIdKeyPattern()
 			if opnd != nil {
-				switch p.s.kind {
+				switch p.scanner.kind {
 				case LexSlash:
 					p.nextLex()
 				case LexSlashSlash:
@@ -512,7 +521,7 @@ func (p *Parser) parseLocationPathPattern() AstNode {
 						abbr:      true,
 						input:     opnd,
 						axis_type: AxisDescendantOrSelf,
-						node_type: NodeAll,
+						node_type: xpath.AllNode,
 					}
 				default:
 					return opnd
@@ -524,31 +533,31 @@ func (p *Parser) parseLocationPathPattern() AstNode {
 }
 
 //>> IdKeyPattern ::= 'id' '(' Literal ')' | 'key' '(' Literal ',' Literal ')'
-func (p *Parser) parseIdKeyPattern() AstNode {
+func (p *XPathParser) parseIdKeyPattern() AstNode {
 	argList := make([]AstNode, 0)
-	if len(p.s.prefix) == 0 {
-		if p.s.name == "id" {
+	if len(p.scanner.prefix) == 0 {
+		if p.scanner.name == "id" {
 			pi, _ := functionTable["id"]
 			p.nextLex()
 			p.passToken(LexLParens)
-			checkToken(p.s, LexString)
-			argList = append(argList, &Operand{StringType, p.s.strval})
+			checkToken(p.scanner, LexString)
+			argList = append(argList, &Operand{StringType, p.scanner.strval})
 			p.nextLex()
 			p.passToken(LexRParens)
-			return &Function{func_type: pi.funcType, argument: argList}
+			return &Function{functype: pi.functype, argument: argList}
 		}
-		if p.s.name == "key" {
+		if p.scanner.name == "key" {
 			p.nextLex()
 			p.passToken(LexLParens)
-			checkToken(p.s, LexString)
-			argList = append(argList, &Operand{StringType, p.s.strval})
+			checkToken(p.scanner, LexString)
+			argList = append(argList, &Operand{StringType, p.scanner.strval})
 			p.nextLex()
 			p.passToken(LexComma)
-			checkToken(p.s, LexString)
-			argList = append(argList, &Operand{StringType, p.s.strval})
+			checkToken(p.scanner, LexString)
+			argList = append(argList, &Operand{StringType, p.scanner.strval})
 			p.nextLex()
 			p.passToken(LexRParens)
-			return &Function{func_type: FuncUserDefined, argument: argList, name: "key"}
+			return &Function{functype: FuncUserDefined, argument: argList, name: "key"}
 		}
 	}
 	return nil
@@ -556,17 +565,17 @@ func (p *Parser) parseIdKeyPattern() AstNode {
 
 //>> PathOp   ::= '/' | '//'
 //>> RelativePathPattern ::= ( RelativePathPattern PathOp )? StepPattern
-func (p *Parser) parseRelativePathPattern(qyInput AstNode) AstNode {
+func (p *XPathParser) parseRelativePathPattern(qyInput AstNode) AstNode {
 	opnd := p.parseStepPattern(qyInput)
-	if p.s.kind == LexSlashSlash {
+	if p.scanner.kind == LexSlashSlash {
 		p.nextLex()
 		opnd = p.parseRelativePathPattern(&Axis{
 			abbr:      true,
 			input:     opnd,
-			node_type: NodeAll,
+			node_type: xpath.AllNode,
 			axis_type: AxisDescendantOrSelf,
 		})
-	} else if p.s.kind == LexSlash {
+	} else if p.scanner.kind == LexSlash {
 		p.nextLex()
 		opnd = p.parseRelativePathPattern(opnd)
 	}
@@ -575,51 +584,51 @@ func (p *Parser) parseRelativePathPattern(qyInput AstNode) AstNode {
 
 //>> StepPattern    ::=    ChildOrAttributeAxisSpecifier NodeTest Predicate*
 //>> ChildOrAttributeAxisSpecifier    ::=    @ ? | ('child' | 'attribute') '::'
-func (p *Parser) parseStepPattern(qyInput AstNode) AstNode {
+func (p *XPathParser) parseStepPattern(qyInput AstNode) AstNode {
 	var opnd AstNode
 	axisType := AxisChild
-	switch p.s.kind {
+	switch p.scanner.kind {
 	case LexAt: //>> '@'
 		axisType = AxisAttribute
 		p.nextLex()
 	case LexAxe: //>> AxisName '::'
 		axisType = p.getAxis()
 		if axisType != AxisChild && axisType != AxisAttribute {
-			panic(fmt.Sprintf("%s has an invalid token.", p.s.expr))
+			panic(fmt.Sprintf("%s has an invalid token.", p.scanner.expr))
 		}
 		p.nextLex()
 	}
-	nodeType := NodeElement
+	nodeType := xpath.ElementNode
 	if axisType == AxisAttribute {
-		nodeType = NodeAttribute
+		nodeType = xpath.AttributeNode
 	}
 
 	opnd = p.parseNodeTest(qyInput, axisType, nodeType)
 
-	for p.s.kind == LexLBracket {
+	for p.scanner.kind == LexLBracket {
 		opnd = &Filter{opnd, p.parsePredicate(opnd)}
 	}
 	return opnd
 }
 
-func (p *Parser) getAxis() AxisType {
-	t, ok := axesTable[p.s.name]
+func (p *XPathParser) getAxis() AxisType {
+	t, ok := axesTable[p.scanner.name]
 	if !ok {
-		panic(fmt.Sprintf("%s has an invalid token.", p.s.expr))
+		panic(fmt.Sprintf("%s has an invalid token.", p.scanner.expr))
 	}
 	return t
 }
 
-func (p *Parser) testOp(op string) bool {
-	return p.s.kind == LexName && len(p.s.prefix) == 0 && p.s.name == op
+func (p *XPathParser) testOp(op string) bool {
+	return p.scanner.kind == LexName && len(p.scanner.prefix) == 0 && p.scanner.name == op
 }
 
-func (p *Parser) nextLex() {
-	p.s.NextLex()
+func (p *XPathParser) nextLex() {
+	p.scanner.NextLex()
 }
 
-func (p *Parser) passToken(t LexKind) {
-	checkToken(p.s, t)
+func (p *XPathParser) passToken(t LexKind) {
+	checkToken(p.scanner, t)
 	p.nextLex()
 }
 
@@ -629,7 +638,7 @@ func checkNodeSet(t ResultType) {
 	}
 }
 
-func isPrimaryExpr(s *Scanner) bool {
+func isPrimaryExpr(s *XPathScanner) bool {
 	return s.kind == LexString ||
 		s.kind == LexNumber ||
 		s.kind == LexDollar ||
@@ -637,7 +646,7 @@ func isPrimaryExpr(s *Scanner) bool {
 		s.kind == LexName && (s.canBeFunction && !isNodeType(s))
 }
 
-func isNodeType(s *Scanner) bool {
+func isNodeType(s *XPathScanner) bool {
 	return s.prefix == "" && (s.name == "node" ||
 		s.name == "text" ||
 		s.name == "processing-instruction" ||
@@ -653,7 +662,7 @@ func isStep(kind LexKind) bool {
 		kind == LexName
 }
 
-func checkToken(s *Scanner, t LexKind) {
+func checkToken(s *XPathScanner, t LexKind) {
 	if s.kind != t {
 		panic(fmt.Sprintf("%s has an invalid token.", s.expr))
 	}
