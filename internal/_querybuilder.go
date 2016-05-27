@@ -1,11 +1,6 @@
 package internal
 
-import (
-	"fmt"
-
-	"github.com/zhengchun/selector/xpath"
-)
-
+/*
 type QueryBuilder struct {
 	query       string
 	depth       int
@@ -153,3 +148,4 @@ func (b *QueryBuilder) processAxis(root *Axis, flags Flags, props *Props) Query 
 	}
 	return result
 }
+*/

@@ -1,1 +1,0 @@
-[.NET XPath Library](https://github.com/dotnet/corefx/tree/master/src/System.Xml.XPath/src/System/Xml/XPath)

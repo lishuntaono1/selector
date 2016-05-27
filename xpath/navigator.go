@@ -1,9 +1,15 @@
 package xpath
 
 type Navigator interface {
-	NodeType() NodeType
 	LocalName() string
+	Value() string
+	Prefix() string
+	NodeType() NodeType
 
 	MoveToRoot()
-	Clone() Navigator
+	MoveToParent() bool
+	MoveToNext() bool
+	MoveToFirstAttribute() bool
+	MoveToNextAttribute() bool
+	MoveToFirstChild() bool
 }
