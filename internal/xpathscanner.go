@@ -84,7 +84,7 @@ func (s *XPathScanner) NextLex() bool {
 		if unicode.IsDigit(s.curr) {
 			s.kind = LexNumber
 			s.numval = scanNumber(s)
-		} else if isNameing(s.curr) {
+		} else if isElemChar(s.curr) {
 			s.kind = LexName
 			s.name = scanName(s)
 			s.prefix = ""
@@ -102,7 +102,7 @@ func (s *XPathScanner) NextLex() bool {
 					if s.curr == '*' {
 						s.NextChar()
 						s.name = "*"
-					} else if isNameing(s.curr) {
+					} else if isElemChar(s.curr) {
 						s.name = scanName(s)
 					} else {
 						panic(fmt.Sprintf("%s has an invalid qualified name.", s.expr))
@@ -189,23 +189,16 @@ func scanString(s *XPathScanner) string {
 
 func scanName(s *XPathScanner) string {
 	start := s.pos - 1
-	len := 0
-	for {
-		if isNameing(s.curr) {
-			s.NextChar()
-			len++
-		} else {
-			break
-		}
+	var len int
+	for len = 0; isElemChar(s.curr); s.NextChar() {
+		len++
 	}
 	return s.expr[start : start+len]
 }
 
-func isNameing(r rune) bool {
-	if unicode.Is(first, r) && !unicode.Is(second, r) {
-		return true
-	}
-	return false
+func isElemChar(r rune) bool {
+	return string(r) != ":" && string(r) != "/" &&
+		(unicode.Is(first, r) || unicode.Is(second, r) || string(r) == "*")
 }
 
 var lexKinds = map[int]LexKind{

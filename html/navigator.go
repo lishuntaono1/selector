@@ -3,21 +3,27 @@ package html
 import (
 	"fmt"
 
+	"github.com/zhengchun/selector/internal"
 	"github.com/zhengchun/selector/xpath"
+
 	"golang.org/x/net/html"
 )
 
-type nodeNavigator struct {
+type NodeNavigator struct {
 	doc      *html.Node
 	currnode *html.Node
 	attindex int
 }
 
-func (n *nodeNavigator) LocalName() string {
-	return n.currnode.Data
+func (n *NodeNavigator) LocalName() string {
+	if n.attindex != -1 {
+		return n.currnode.Attr[n.attindex].Key
+	} else {
+		return n.currnode.Data
+	}
 }
 
-func (n *nodeNavigator) Value() string {
+func (n *NodeNavigator) Value() string {
 	switch n.currnode.Type {
 	case html.CommentNode:
 		return n.currnode.Data
@@ -35,15 +41,49 @@ func (n *nodeNavigator) Value() string {
 	}
 }
 
-func (n *nodeNavigator) Prefix() string {
+func (n *NodeNavigator) Prefix() string {
 	return ""
 }
 
-func (n *nodeNavigator) MoveToRoot() {
+func (n *NodeNavigator) Select(xpath string) xpath.NodeIterator {
+	builder := &internal.QueryBuilder{}
+	var q = builder.Build(xpath)
+	iter := &NodeIterator{cur: n, query: q}
+	//q.Evaluate(iter)
+	return iter
+}
+
+func (n *NodeNavigator) Clone() xpath.Navigator {
+	nav := *n
+	return &nav
+}
+
+func (n *NodeNavigator) MoveTo(other xpath.Navigator) bool {
+	nav, ok := other.(*NodeNavigator)
+	if !ok {
+		return false
+	}
+	if nav.doc == n.doc {
+		n.currnode = nav.currnode
+		n.attindex = nav.attindex
+		return true
+	}
+	return false
+}
+
+func (n *NodeNavigator) MoveToRoot() {
 	n.currnode = n.doc
 }
 
-func (n *nodeNavigator) MoveToFirst() bool {
+func (n *NodeNavigator) MoveToParent() bool {
+	if n.currnode.Parent == nil {
+		return false
+	}
+	n.currnode = n.currnode.Parent
+	return true
+}
+
+func (n *NodeNavigator) MoveToFirst() bool {
 	if n.currnode.Parent == nil {
 		return false
 	}
@@ -55,7 +95,7 @@ func (n *nodeNavigator) MoveToFirst() bool {
 	return true
 }
 
-func (n *nodeNavigator) MoveToNext() bool {
+func (n *NodeNavigator) MoveToNext() bool {
 	if cur := n.currnode.NextSibling; cur == nil {
 		return false
 	} else {
@@ -64,7 +104,7 @@ func (n *nodeNavigator) MoveToNext() bool {
 	return true
 }
 
-func (n *nodeNavigator) MoveToFirstAttribute() bool {
+func (n *NodeNavigator) MoveToFirstAttribute() bool {
 	if len(n.currnode.Attr) == 0 {
 		return false
 	}
@@ -72,7 +112,7 @@ func (n *nodeNavigator) MoveToFirstAttribute() bool {
 	return true
 }
 
-func (n *nodeNavigator) MoveToNextAttribute() bool {
+func (n *NodeNavigator) MoveToNextAttribute() bool {
 	if n.attindex >= len(n.currnode.Attr)-1 {
 		return false
 	}
@@ -80,7 +120,7 @@ func (n *nodeNavigator) MoveToNextAttribute() bool {
 	return true
 }
 
-func (n *nodeNavigator) MoveToFirstChild() bool {
+func (n *NodeNavigator) MoveToFirstChild() bool {
 	if cur := n.currnode.FirstChild; cur == nil {
 		return false
 	} else {
@@ -89,7 +129,7 @@ func (n *nodeNavigator) MoveToFirstChild() bool {
 	return true
 }
 
-func (n *nodeNavigator) NodeType() xpath.NodeType {
+func (n *NodeNavigator) NodeType() xpath.NodeType {
 	switch n.currnode.Type {
 	case html.CommentNode:
 		return xpath.CommentNode

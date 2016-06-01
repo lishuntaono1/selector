@@ -206,10 +206,10 @@ func (p *XPathParser) parsePathExpr(qyInput AstNode) AstNode {
 		} else if p.scanner.kind == LexSlashSlash {
 			p.nextLex()
 			opnd = p.parseRelativeLocationPath(&Axis{
-				abbr:      true,
-				input:     opnd,
-				axis_type: AxisDescendantOrSelf,
-				node_type: xpath.AllNode,
+				abbr:     true,
+				input:    opnd,
+				axistype: AxisDescendantOrSelf,
+				nodetype: xpath.AllNode,
 			})
 		}
 	} else {
@@ -252,10 +252,10 @@ func (p *XPathParser) parseLocationPath(qyInput AstNode) AstNode {
 	} else if p.scanner.kind == LexSlashSlash {
 		p.nextLex()
 		return p.parseRelativeLocationPath(&Axis{
-			abbr:      true,
-			input:     &Root{},
-			axis_type: AxisDescendantOrSelf,
-			node_type: xpath.AllNode,
+			abbr:     true,
+			input:    &Root{},
+			axistype: AxisDescendantOrSelf,
+			nodetype: xpath.AllNode,
 		})
 	} else {
 		return p.parseRelativeLocationPath(qyInput)
@@ -271,10 +271,10 @@ func (p *XPathParser) parseRelativeLocationPath(qyInput AstNode) AstNode {
 		if p.scanner.kind == LexSlashSlash {
 			p.nextLex()
 			opnd = &Axis{
-				abbr:      true,
-				input:     opnd,
-				axis_type: AxisDescendantOrSelf,
-				node_type: xpath.AllNode,
+				abbr:     true,
+				input:    opnd,
+				axistype: AxisDescendantOrSelf,
+				nodetype: xpath.AllNode,
 			}
 		} else if p.scanner.kind == LexSlash {
 			p.nextLex()
@@ -291,18 +291,18 @@ func (p *XPathParser) parseStep(qyInput AstNode) AstNode {
 	if p.scanner.kind == LexDot { //>> '.'
 		p.nextLex()
 		opnd = &Axis{
-			abbr:      true,
-			input:     qyInput,
-			axis_type: AxisSelf,
-			node_type: xpath.AllNode,
+			abbr:     true,
+			input:    qyInput,
+			axistype: AxisSelf,
+			nodetype: xpath.AllNode,
 		}
 	} else if p.scanner.kind == LexDotDot { //>> '..'
 		p.nextLex()
 		opnd = &Axis{
-			abbr:      true,
-			input:     qyInput,
-			axis_type: AxisParent,
-			node_type: xpath.AllNode,
+			abbr:     true,
+			input:    qyInput,
+			axistype: AxisParent,
+			nodetype: xpath.AllNode,
 		}
 	} else { //>> ( AxisName '::' | '@' )? NodeTest Predicate*
 		axisType := AxisChild
@@ -375,11 +375,11 @@ func (p *XPathParser) parseNodeTest(qyInput AstNode, axisType AxisType, nodeType
 		panic("Expression must evaluate to a node-set.")
 	}
 	return &Axis{
-		input:     qyInput,
-		prefix:    nodePrefix,
-		name:      nodeName,
-		axis_type: axisType,
-		node_type: nodeType,
+		input:    qyInput,
+		prefix:   nodePrefix,
+		name:     nodeName,
+		axistype: axisType,
+		nodetype: nodeType,
 	}
 }
 
@@ -503,10 +503,10 @@ func (p *XPathParser) parseLocationPathPattern() AstNode {
 	case LexSlashSlash:
 		p.nextLex()
 		opnd = &Axis{
-			input:     &Root{},
-			abbr:      true,
-			axis_type: AxisDescendantOrSelf,
-			node_type: xpath.AllNode,
+			input:    &Root{},
+			abbr:     true,
+			axistype: AxisDescendantOrSelf,
+			nodetype: xpath.AllNode,
 		}
 	case LexName:
 		if p.scanner.canBeFunction {
@@ -518,10 +518,10 @@ func (p *XPathParser) parseLocationPathPattern() AstNode {
 				case LexSlashSlash:
 					p.nextLex()
 					opnd = &Axis{
-						abbr:      true,
-						input:     opnd,
-						axis_type: AxisDescendantOrSelf,
-						node_type: xpath.AllNode,
+						abbr:     true,
+						input:    opnd,
+						axistype: AxisDescendantOrSelf,
+						nodetype: xpath.AllNode,
 					}
 				default:
 					return opnd
@@ -570,10 +570,10 @@ func (p *XPathParser) parseRelativePathPattern(qyInput AstNode) AstNode {
 	if p.scanner.kind == LexSlashSlash {
 		p.nextLex()
 		opnd = p.parseRelativePathPattern(&Axis{
-			abbr:      true,
-			input:     opnd,
-			node_type: xpath.AllNode,
-			axis_type: AxisDescendantOrSelf,
+			abbr:     true,
+			input:    opnd,
+			nodetype: xpath.AllNode,
+			axistype: AxisDescendantOrSelf,
 		})
 	} else if p.scanner.kind == LexSlash {
 		p.nextLex()

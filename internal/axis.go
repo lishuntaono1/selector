@@ -24,8 +24,8 @@ type Axis struct {
 	input        AstNode
 	prefix, name string
 	abbr         bool
-	axis_type    AxisType
-	node_type    xpath.NodeType
+	axistype     AxisType
+	nodetype     xpath.NodeType
 }
 
 func (a *Axis) Type() AstNodeType {
