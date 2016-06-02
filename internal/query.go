@@ -13,3 +13,9 @@ type selector func(xpath.Navigator) bool
 func (s selector) Matches(nav xpath.Navigator) bool {
 	return s(nav)
 }
+
+type Query2 interface {
+	Advance() xpath.Navigator
+	Evaluate() interface{}
+	Value(xpath.Navigator) interface{}
+}

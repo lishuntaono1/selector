@@ -15,8 +15,11 @@ type NodeNavigator struct {
 	attindex int
 }
 
+func (n *NodeNavigator) reset() {
+	n.attindex = -1
+}
 func (n *NodeNavigator) LocalName() string {
-	if n.attindex != -1 {
+	if n.attindex != -1 && len(n.currnode.Attr) > 0 {
 		return n.currnode.Attr[n.attindex].Key
 	} else {
 		return n.currnode.Data
@@ -73,9 +76,11 @@ func (n *NodeNavigator) MoveTo(other xpath.Navigator) bool {
 
 func (n *NodeNavigator) MoveToRoot() {
 	n.currnode = n.doc
+	n.reset()
 }
 
 func (n *NodeNavigator) MoveToParent() bool {
+	n.reset()
 	if n.currnode.Parent == nil {
 		return false
 	}
@@ -84,6 +89,7 @@ func (n *NodeNavigator) MoveToParent() bool {
 }
 
 func (n *NodeNavigator) MoveToFirst() bool {
+	n.reset()
 	if n.currnode.Parent == nil {
 		return false
 	}
@@ -96,6 +102,7 @@ func (n *NodeNavigator) MoveToFirst() bool {
 }
 
 func (n *NodeNavigator) MoveToNext() bool {
+	n.reset()
 	if cur := n.currnode.NextSibling; cur == nil {
 		return false
 	} else {
@@ -121,6 +128,7 @@ func (n *NodeNavigator) MoveToNextAttribute() bool {
 }
 
 func (n *NodeNavigator) MoveToFirstChild() bool {
+	n.reset()
 	if cur := n.currnode.FirstChild; cur == nil {
 		return false
 	} else {

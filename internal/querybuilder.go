@@ -62,7 +62,6 @@ func (builder *QueryBuilder) processAxis(root *Axis, flags Flags, props *Props) 
 					if input.input != nil {
 						qyGrandInput = builder.processNode(input.input, smartDescFlag, props)
 					} else {
-						//qyGrandInput = &ContextQuery{}
 						qyGrandInput = contextSelector()
 						*props = noneProp
 					}
@@ -118,7 +117,6 @@ func (builder *QueryBuilder) processFilter(root *Filter, flags Flags, props *Pro
 		*props |= posFilterProp
 	}
 	/*merging predicates*/
-
 	return filterSelector(qyInput, cond, propsCond&hasPositionProp == 0, nil)
 }
 
@@ -196,7 +194,8 @@ func absoluteSelector() selector {
 
 func logicalSelector(op OpType, opnd1, opnd2 Query) selector {
 	return func(nav xpath.Navigator) bool {
-		if !(opnd1.Matches(nav) || opnd2.Matches(nav)) {
+
+		if !(opnd1.Matches(nav) && opnd2.Matches(nav)) {
 			return false
 		}
 		type Evaluate interface {
@@ -213,8 +212,9 @@ func logicalSelector(op OpType, opnd1, opnd2 Query) selector {
 		} else {
 			val2 = nav.Value() // string
 		}
+
 		fmt.Println(val1.(string))
-		fmt.Println(val2.(string))
+
 		switch op {
 		case OpEQ: // `=`
 			return val1.(string) == val2.(string)
@@ -229,7 +229,9 @@ func filterSelector(qyInput Query, cond Query, noPosition bool, matches func(xpa
 			if !qyInput.Matches(nav) {
 				return false
 			}
-			return cond.Matches(nav)
+			if cond.Matches(nav) {
+				return true
+			}
 		}
 	}
 }
@@ -243,8 +245,8 @@ func childrenSelector(qyInput Query, matches func(xpath.Navigator) bool) selecto
 				if !qyInput.Matches(nav) {
 					return false
 				}
-
 				movenext = func() bool {
+					fmt.Println(nav.LocalName())
 					for {
 						if position == 0 && !nav.MoveToFirstChild() {
 							return false
@@ -275,13 +277,12 @@ func descendantSelector(qyInput Query, matchSelf bool, matches func(xpath.Naviga
 	return func(nav xpath.Navigator) bool {
 		for {
 			if movenext == nil {
-				var first bool
+				var first bool = true
 				var level int
 
 				if !qyInput.Matches(nav) {
 					return false
 				}
-
 				movenext = func() bool {
 					if first {
 						first = false
@@ -322,9 +323,9 @@ func descendantSelector(qyInput Query, matchSelf bool, matches func(xpath.Naviga
 }
 
 func attributeSelector(qyInput Query, matches func(xpath.Navigator) bool) selector {
-	var onAttr bool
-	var currNode xpath.Navigator
 	return func(nav xpath.Navigator) bool {
+		var onAttr bool
+		var currNode xpath.Navigator
 		for {
 			if !onAttr {
 				if !qyInput.Matches(nav) {
@@ -337,12 +338,9 @@ func attributeSelector(qyInput Query, matches func(xpath.Navigator) bool) select
 			}
 			if onAttr {
 				if matches(currNode) {
-					onAttr = false
 					nav.MoveTo(currNode)
 					return true
 				}
-			} else {
-				return false
 			}
 		}
 	}

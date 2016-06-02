@@ -46,12 +46,13 @@ func processAxis(root *Axis) {
 }
 
 func processFilter(root *Filter) {
+	fmt.Println("====Filter(Begin)========")
 	processNode(root.condition)
 
 	if root.input != nil {
 		processNode(root.input)
 	}
-	fmt.Println("Filter")
+	fmt.Println("======Filter(END)========")
 }
 func processNode(root AstNode) {
 	switch root.Type() {

@@ -6,7 +6,7 @@ import (
 )
 
 type NodeIterator struct {
-	cur   xpath.Navigator
+	cur   *NodeNavigator
 	query internal.Query
 }
 

@@ -10,10 +10,12 @@ import (
 )
 
 func main() {
-	s := `<p class="a">Links:<br/></p><ul><li><a href="foo">Foo</a></li><li><a href="bar">BarBaz</a></li></ul>`
+	s := `<a href="foo">Foo</a><a href="bar">BarBaz</a>`
 	doc, _ := htmlx.Parse(strings.NewReader(s))
 
-	var nodes = html.SelectNodes(doc, "//a[@href='foo']")
+	var nodes = html.SelectNodes(doc, "//a[@href='bar']")
+
+	fmt.Println("===========")
 	for _, node := range nodes {
 		fmt.Println(html.InnerText(node))
 	}
