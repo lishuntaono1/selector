@@ -49,11 +49,7 @@ func (n *NodeNavigator) Prefix() string {
 }
 
 func (n *NodeNavigator) Select(xpath string) xpath.NodeIterator {
-	builder := &internal.QueryBuilder{}
-	var q = builder.Build(xpath)
-	iter := &NodeIterator{cur: n, query: q}
-	//q.Evaluate(iter)
-	return iter
+	return internal.Express(n.Clone(), xpath)
 }
 
 func (n *NodeNavigator) Clone() xpath.Navigator {
@@ -76,11 +72,9 @@ func (n *NodeNavigator) MoveTo(other xpath.Navigator) bool {
 
 func (n *NodeNavigator) MoveToRoot() {
 	n.currnode = n.doc
-	n.reset()
 }
 
 func (n *NodeNavigator) MoveToParent() bool {
-	n.reset()
 	if n.currnode.Parent == nil {
 		return false
 	}
@@ -89,7 +83,6 @@ func (n *NodeNavigator) MoveToParent() bool {
 }
 
 func (n *NodeNavigator) MoveToFirst() bool {
-	n.reset()
 	if n.currnode.Parent == nil {
 		return false
 	}
@@ -102,7 +95,6 @@ func (n *NodeNavigator) MoveToFirst() bool {
 }
 
 func (n *NodeNavigator) MoveToNext() bool {
-	n.reset()
 	if cur := n.currnode.NextSibling; cur == nil {
 		return false
 	} else {
@@ -128,7 +120,6 @@ func (n *NodeNavigator) MoveToNextAttribute() bool {
 }
 
 func (n *NodeNavigator) MoveToFirstChild() bool {
-	n.reset()
 	if cur := n.currnode.FirstChild; cur == nil {
 		return false
 	} else {

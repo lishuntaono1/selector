@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/zhengchun/selector/xpath"
 )
@@ -27,6 +28,7 @@ const (
 
 type QueryBuilder struct {
 	depth int
+	query string
 }
 
 var canBeNumber = func(t ResultType) bool {
@@ -62,7 +64,7 @@ func (builder *QueryBuilder) processAxis(root *Axis, flags Flags, props *Props) 
 					if input.input != nil {
 						qyGrandInput = builder.processNode(input.input, smartDescFlag, props)
 					} else {
-						qyGrandInput = contextSelector()
+						qyGrandInput = &contextQuery{}
 						*props = noneProp
 					}
 					result = descendantSelector(qyGrandInput, false, matches)
@@ -75,16 +77,16 @@ func (builder *QueryBuilder) processAxis(root *Axis, flags Flags, props *Props) 
 		}
 		qyInput = builder.processNode(root.input, flags, props)
 	} else {
-		qyInput = contextSelector()
+		qyInput = &contextQuery{}
 		*props = noneProp
 	}
 	switch root.axistype {
 	case AxisChild:
 		result = childrenSelector(qyInput, matches)
 	case AxisAncestor:
-		result = ancestorSelector(qyInput, false, matches)
+		//result = ancestorSelector(qyInput, false, matches)
 	case AxisAncestorOrSelf:
-		result = ancestorSelector(qyInput, true, matches)
+		//result = ancestorSelector(qyInput, true, matches)
 	case AxisAttribute:
 		result = attributeSelector(qyInput, matches)
 	case AxisDescendant:
@@ -116,34 +118,78 @@ func (builder *QueryBuilder) processFilter(root *Filter, flags Flags, props *Pro
 		// this condition is positional rightmost filter should be avare of this.
 		*props |= posFilterProp
 	}
-	/*merging predicates*/
+
 	return filterSelector(qyInput, cond, propsCond&hasPositionProp == 0, nil)
 }
 
 func (builder *QueryBuilder) processOperator(root *Operator, flags Flags, props *Props) Query {
 	var props1, props2 Props
+
 	op1 := builder.processNode(root.opnd1, noneFlag, &props1)
 	op2 := builder.processNode(root.opnd2, noneFlag, &props2)
-
-	return logicalSelector(root.op, op1, op2)
-
-	/*
-		*props = props1 | props2
-		switch root.op {
-		case OpPLUS, OpMINUS, OpMUL, OpMOD, OpDIV:
-			//Numeric
-		case OpLT, OpGT, OpLE, OpGE, OpEQ, OpNE:
-			//Logical
-		case OpOR, OpAND:
-			//Boolean
-		case OpUNION:
-			*props |= nonFlatProp
-			//return new UnionExpr(op1, op2);
-		default:
-			return nil
+	*props = props1 | props2
+	switch root.op {
+	case OpPLUS, OpMINUS, OpMUL, OpMOD, OpDIV:
+		return &numericExpr{root.op, op1, op2}
+	case OpLT, OpGT, OpLE, OpGE, OpEQ, OpNE:
+		return &logicalExpr{root.op, op1, op2}
+	case OpOR, OpAND:
+		if root.opnd1.ReturnType() != BooleanType {
+			//BooleanFunctions
 		}
-	*/
+		if root.opnd2.ReturnType() != BooleanType {
+			// /BooleanFunctions
+		}
+		return &booleanExpr{root.op == OpOR, op1, op2}
+	case OpUNION:
+	}
+	return nil
+}
 
+// nodeFunctions is ValueQuery interface implemented.
+type nodeFunctions struct {
+	ft  FunctionType
+	arg Query
+}
+
+func (f *nodeFunctions) Advance() xpath.Navigator {
+	return nil
+}
+
+func (f *nodeFunctions) Evaluate(iter NodeIterator) interface{} {
+	switch f.ft {
+	case FuncPosition:
+		return float64(iter.CurrentPosition())
+	case FuncLast:
+		//default:
+		//	panic("sorry,this feature not supported yet.")
+	}
+	return float64(iter.CurrentPosition())
+}
+
+func (f *nodeFunctions) Current() xpath.Navigator {
+	return nil
+}
+
+func (f *nodeFunctions) MoveNext() bool {
+	return false
+}
+
+func (f *nodeFunctions) CurrentPosition() int {
+	return 0
+}
+
+func (builder *QueryBuilder) processFunction(root *Function, flags Flags, props *Props) Query {
+	*props = noneProp
+	var qy Query
+	switch root.functype {
+	case FuncPosition:
+		qy = &nodeFunctions{root.functype, nil}
+		*props |= hasPositionProp
+	default:
+		panic(fmt.Sprintf("The XPath query %s is not supported.", builder.query))
+	}
+	return qy
 }
 
 func (builder *QueryBuilder) processNode(root AstNode, flags Flags, props *Props) Query {
@@ -160,8 +206,10 @@ func (builder *QueryBuilder) processNode(root AstNode, flags Flags, props *Props
 		result = builder.processOperator(root.(*Operator), flags, props)
 	case ConstantOperandAst:
 		result = &operandQuery{(root.(*Operand).val)}
+	case FunctionAst:
+		result = builder.processFunction(root.(*Function), flags, props)
 	case RootAst:
-		result = absoluteSelector()
+		result = &absoluteQuery{}
 	default:
 		panic("Unknown QueryType encountered!!")
 	}
@@ -177,207 +225,290 @@ func (builder *QueryBuilder) Build(xpath string) Query {
 	return builder.build(ParseXPathExpression(xpath))
 }
 
-func contextSelector() selector {
-	var count = 0
-	return func(nav xpath.Navigator) bool {
-		if count == 0 {
-			count = 1
-			return true
+type filterQuery struct {
+	qyInput  Query
+	cond     Query
+	matches  func(xpath.Navigator) bool
+	currnode xpath.Navigator
+}
+
+func (f *filterQuery) Advance() xpath.Navigator {
+	for {
+		nav := f.qyInput.Advance()
+		if nav == nil {
+			return nil
 		}
-		return false
+		f.currnode = nav
+		if f.EvaluatePredicate() {
+			return nav
+		}
 	}
 }
 
-func absoluteSelector() selector {
-	return contextSelector()
+func (f *filterQuery) Evaluate(iter NodeIterator) interface{} {
+	f.qyInput.Evaluate(iter)
+	return f
 }
 
-func logicalSelector(op OpType, opnd1, opnd2 Query) selector {
-	return func(nav xpath.Navigator) bool {
-
-		if !(opnd1.Matches(nav) && opnd2.Matches(nav)) {
-			return false
+func (f *filterQuery) EvaluatePredicate() bool {
+	var x = f.cond.Evaluate(f.qyInput)
+	v := reflect.ValueOf(x)
+	switch v.Kind() {
+	case reflect.Bool:
+		return v.Bool()
+	case reflect.String:
+		return len(v.String()) > 0
+	case reflect.Float64:
+		return int(v.Float()) == f.qyInput.CurrentPosition()
+	default:
+		if reflect.TypeOf(x).Implements(reflect.TypeOf((*NodeIterator)(nil)).Elem()) {
+			return f.cond.Advance() != nil
 		}
-		type Evaluate interface {
-			Evaluate(xpath.Navigator) interface{}
-		}
-		var val1, val2 interface{}
-		if eval, ok := opnd1.(Evaluate); ok {
-			val1 = eval.Evaluate(nav)
-		} else {
-			val1 = nav.Value() // string
-		}
-		if eval, ok := opnd2.(Evaluate); ok {
-			val2 = eval.Evaluate(nav)
-		} else {
-			val2 = nav.Value() // string
-		}
-
-		fmt.Println(val1.(string))
-
-		switch op {
-		case OpEQ: // `=`
-			return val1.(string) == val2.(string)
-		}
-		return false
 	}
+	return false
 }
 
-func filterSelector(qyInput Query, cond Query, noPosition bool, matches func(xpath.Navigator) bool) selector {
-	return func(nav xpath.Navigator) bool {
-		for {
-			if !qyInput.Matches(nav) {
-				return false
+func (f *filterQuery) MoveNext() bool {
+	return false
+}
+
+func (f *filterQuery) Current() xpath.Navigator {
+	return f.currnode
+}
+
+func (f *filterQuery) CurrentPosition() int {
+	return 0
+}
+
+func filterSelector(qyInput Query, cond Query, noPosition bool, matches func(xpath.Navigator) bool) Query {
+	return &filterQuery{qyInput: qyInput, cond: cond, matches: matches}
+}
+
+type childrenQuery struct {
+	qyInput  Query
+	position int
+	movenext func() bool
+	matches  func(xpath.Navigator) bool
+	currnode xpath.Navigator
+}
+
+func (c *childrenQuery) Advance() xpath.Navigator {
+	for {
+		if c.movenext == nil {
+			c.currnode = c.qyInput.Advance()
+			if c.currnode == nil {
+				return nil
 			}
-			if cond.Matches(nav) {
-				return true
-			}
-		}
-	}
-}
-
-func childrenSelector(qyInput Query, matches func(xpath.Navigator) bool) selector {
-	var movenext func() bool
-	var position = 0
-	return func(nav xpath.Navigator) bool {
-		for {
-			if movenext == nil {
-				if !qyInput.Matches(nav) {
-					return false
-				}
-				movenext = func() bool {
-					fmt.Println(nav.LocalName())
-					for {
-						if position == 0 && !nav.MoveToFirstChild() {
-							return false
-						} else if position > 0 && !nav.MoveToNext() {
-							nav.MoveToParent()
-							return false
-						}
-						position++
-						if matches(nav) {
-							return true
-						}
+			c.movenext = func() bool {
+				for {
+					if c.position == 0 && !c.currnode.MoveToFirstChild() {
+						return false
+					} else if c.position > 0 && !c.currnode.MoveToNext() {
+						c.currnode.MoveToParent()
+						return false
+					}
+					c.position++
+					if c.matches(c.currnode) {
+						return true
 					}
 				}
 			}
-			if movenext() {
-				return true
-			} else {
-				position = 0
-				movenext = nil
+		}
+		if c.movenext() {
+			return c.currnode
+		} else {
+			c.position = 0
+			c.movenext = nil
+		}
+	}
+}
+
+func (c *childrenQuery) Evaluate(iter NodeIterator) interface{} {
+	c.qyInput.Evaluate(iter)
+	return c
+}
+
+func (c *childrenQuery) MoveNext() bool {
+	return false
+}
+
+func (c *childrenQuery) Current() xpath.Navigator {
+	return c.currnode
+}
+func (c *childrenQuery) CurrentPosition() int {
+	return c.position
+}
+
+func childrenSelector(qyInput Query, matches func(xpath.Navigator) bool) Query {
+	return &childrenQuery{qyInput: qyInput, matches: matches}
+}
+
+type attributeQuery struct {
+	qyInput  Query
+	position int
+	matches  func(xpath.Navigator) bool
+}
+
+func (a *attributeQuery) Advance() xpath.Navigator {
+	var onAttr bool
+	var currNode xpath.Navigator
+	for {
+		if !onAttr {
+			nav := a.qyInput.Advance()
+			if nav == nil {
+				return nil
+			}
+			a.position = 0
+			currNode = nav.Clone()
+			onAttr = currNode.MoveToFirstAttribute()
+		} else {
+			onAttr = currNode.MoveToNextAttribute()
+		}
+		if onAttr {
+			if a.matches(currNode) {
+				a.position++
+				return currNode
 			}
 		}
 	}
 }
 
-func descendantSelector(qyInput Query, matchSelf bool, matches func(xpath.Navigator) bool) selector {
-	var movenext func() bool
+func (a *attributeQuery) Evaluate(iter NodeIterator) interface{} {
+	a.qyInput.Evaluate(iter)
+	return a
+}
 
-	return func(nav xpath.Navigator) bool {
-		for {
-			if movenext == nil {
-				var first bool = true
-				var level int
+func (a *attributeQuery) Current() xpath.Navigator {
+	return nil
+}
 
-				if !qyInput.Matches(nav) {
-					return false
-				}
-				movenext = func() bool {
-					if first {
-						first = false
-						if matchSelf && matches(nav) {
-							return true
-						}
+func (a *attributeQuery) MoveNext() bool {
+	return false
+}
+
+func (a *attributeQuery) CurrentPosition() int {
+	return a.position
+}
+
+func attributeSelector(qyInput Query, matches func(xpath.Navigator) bool) Query {
+	return &attributeQuery{qyInput: qyInput, matches: matches}
+}
+
+type descendantQuery struct {
+	qyInput   Query
+	matchSelf bool
+	matches   func(xpath.Navigator) bool
+	position  int
+
+	movenext func() bool
+	currnode xpath.Navigator
+}
+
+func (d *descendantQuery) Advance() xpath.Navigator {
+	for {
+		if d.movenext == nil {
+			var first bool = true
+			var level int
+			d.currnode = d.qyInput.Advance()
+			if d.currnode == nil {
+				return nil
+			}
+			d.movenext = func() bool {
+				if first {
+					first = false
+					if d.matchSelf && d.matches(d.currnode) {
+						d.position = 1
+						return true
 					}
-					for {
-						if nav.MoveToFirstChild() {
-							level++
-						} else {
-							for {
-								if level == 0 {
-									return false
-								}
-								if nav.MoveToNext() {
-									break
-								}
-								nav.MoveToParent()
-								level--
+				}
+				for {
+					if d.currnode.MoveToFirstChild() {
+						level++
+					} else {
+						for {
+							if level == 0 {
+								return false
 							}
+							if d.currnode.MoveToNext() {
+								break
+							}
+							d.currnode.MoveToParent()
+							level--
 						}
-						if matches(nav) {
-							return true
-						}
+					}
+					if d.matches(d.currnode) {
+						return true
 					}
 				}
 			}
-
-			if movenext() {
-				return true
-			} else {
-				movenext = nil
-			}
 		}
-
-	}
-}
-
-func attributeSelector(qyInput Query, matches func(xpath.Navigator) bool) selector {
-	return func(nav xpath.Navigator) bool {
-		var onAttr bool
-		var currNode xpath.Navigator
-		for {
-			if !onAttr {
-				if !qyInput.Matches(nav) {
-					return false
-				}
-				currNode = nav.Clone()
-				onAttr = currNode.MoveToFirstAttribute()
-			} else {
-				onAttr = currNode.MoveToNextAttribute()
-			}
-			if onAttr {
-				if matches(currNode) {
-					nav.MoveTo(currNode)
-					return true
-				}
-			}
+		if d.movenext() {
+			d.position++
+			return d.currnode
+		} else {
+			d.movenext = nil
 		}
 	}
 }
 
-func ancestorSelector(qyInput Query, matchSelf bool, matches func(xpath.Navigator) bool) selector {
-	var ancestor xpath.Navigator
-	return func(nav xpath.Navigator) bool {
-		for {
-			if !qyInput.Matches(nav) {
-				return false
-			}
-			if matchSelf {
+func (d *descendantQuery) Evaluate(ctx NodeIterator) interface{} {
+	d.qyInput.Evaluate(ctx)
+	return d
+}
 
-			}
-			if ancestor == nil {
-				ancestor = nav.Clone()
-			}
-			for ancestor.MoveToParent() {
-				if matches(ancestor) {
-					nav.MoveTo(ancestor)
-					return true
-				}
-			}
-			ancestor = nil
-		}
-	}
+func (d *descendantQuery) Current() xpath.Navigator {
+	return d.currnode
+}
+
+func (d *descendantQuery) MoveNext() bool {
+	return false
+}
+
+func (d *descendantQuery) CurrentPosition() int {
+	return d.position
+}
+
+func descendantSelector(qyInput Query, matchSelf bool, matches func(xpath.Navigator) bool) Query {
+	return &descendantQuery{qyInput: qyInput, matchSelf: matchSelf, matches: matches}
 }
 
 type operandQuery struct {
 	val interface{}
 }
 
-func (o *operandQuery) Matches(nav xpath.Navigator) bool {
+func (o *operandQuery) Advance() xpath.Navigator {
+	return nil
+}
+
+func (o *operandQuery) Evaluate(iter NodeIterator) interface{} {
+	return o.val
+}
+
+func (o *operandQuery) Current() xpath.Navigator {
+	return nil
+}
+
+func (o *operandQuery) MoveNext() bool {
 	return true
 }
 
-func (o *operandQuery) Evaluate(nav xpath.Navigator) interface{} {
-	return o.val
+func (o *operandQuery) CurrentPosition() int {
+	return 0
+}
+
+func getXPathType(v interface{}) ResultType {
+	vt := reflect.ValueOf(v)
+	switch vt.Kind() {
+	case reflect.Bool:
+		return BooleanType
+	case reflect.Float64:
+		return NumberType
+	case reflect.String:
+		return StringType
+	default:
+		if _, ok := v.(NodeIterator); ok {
+			return NodeSetType
+		}
+	}
+	return StringType
 }

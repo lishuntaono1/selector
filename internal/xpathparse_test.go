@@ -6,7 +6,7 @@ import (
 )
 
 func TestParse(t *testing.T) {
-	var node = ParseXPathExpression("//a[@href]")
+	var node = ParseXPathExpression("//a[last()-1]")
 	processNode(node)
 }
 
@@ -46,19 +46,32 @@ func processAxis(root *Axis) {
 }
 
 func processFilter(root *Filter) {
-	fmt.Println("====Filter(Begin)========")
 	processNode(root.condition)
-
 	if root.input != nil {
 		processNode(root.input)
 	}
-	fmt.Println("======Filter(END)========")
+	fmt.Println("Filter")
 }
+
+func processFunction(root *Function) {
+	fmt.Println("Function")
+}
+
+func processOperator(root *Operator) {
+	processNode(root.opnd1)
+	processNode(root.opnd2)
+	fmt.Println("operator")
+}
+
 func processNode(root AstNode) {
 	switch root.Type() {
 	case AxisAst:
 		processAxis(root.(*Axis))
 	case FilterAst:
 		processFilter(root.(*Filter))
+	case FunctionAst:
+		processFunction(root.(*Function))
+	case OperatorAst:
+		processOperator(root.(*Operator))
 	}
 }
