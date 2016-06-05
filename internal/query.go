@@ -11,6 +11,12 @@ type Query interface {
 	Evaluate(NodeIterator) interface{}
 }
 
+type axisQuery interface {
+	MoveNext() bool
+	Count() int
+	Reset()
+}
+
 type contextQuery struct {
 	count int
 	nav   xpath.Navigator
@@ -32,6 +38,14 @@ func (c *contextQuery) Evaluate(iter NodeIterator) interface{} {
 
 func (c *contextQuery) MoveNext() bool {
 	return c.Advance() != nil
+}
+
+func (c *contextQuery) Count() int {
+	return 0
+}
+
+func (c *contextQuery) Reset() {
+	c.count = 0
 }
 
 func (c *contextQuery) Current() xpath.Navigator {

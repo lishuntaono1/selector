@@ -38,6 +38,11 @@ func (e *numericExpr) MoveNext() bool {
 	return false
 }
 
+func (e *numericExpr) Count() int {
+	return 0
+}
+func (e *numericExpr) Reset() {
+}
 func (e *numericExpr) CurrentPosition() int {
 	return 0
 }

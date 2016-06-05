@@ -4,7 +4,8 @@ import "github.com/zhengchun/selector/xpath"
 
 type NodeIterator interface {
 	xpath.NodeIterator
-
+	Count() int
+	Reset()
 	CurrentPosition() int
 }
 
@@ -24,10 +25,17 @@ func (x *XPathSelectionIterator) MoveNext() bool {
 	return false
 }
 
-func (x *XPathSelectionIterator) Current() xpath.Navigator {
-	return x.nav
+func (x *XPathSelectionIterator) Count() int {
+	return 0
+}
+
+func (x *XPathSelectionIterator) Reset() {
 }
 
 func (x *XPathSelectionIterator) CurrentPosition() int {
 	return 0
+}
+
+func (x *XPathSelectionIterator) Current() xpath.Navigator {
+	return x.nav
 }

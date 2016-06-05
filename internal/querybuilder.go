@@ -161,6 +161,8 @@ func (f *nodeFunctions) Evaluate(iter NodeIterator) interface{} {
 	case FuncPosition:
 		return float64(iter.CurrentPosition())
 	case FuncLast:
+		fmt.Println(reflect.TypeOf(iter))
+		return iter.Count()
 		//default:
 		//	panic("sorry,this feature not supported yet.")
 	}
@@ -175,6 +177,13 @@ func (f *nodeFunctions) MoveNext() bool {
 	return false
 }
 
+func (f *nodeFunctions) Reset() {
+}
+
+func (f *nodeFunctions) Count() int {
+	return 0
+}
+
 func (f *nodeFunctions) CurrentPosition() int {
 	return 0
 }
@@ -186,6 +195,9 @@ func (builder *QueryBuilder) processFunction(root *Function, flags Flags, props 
 	case FuncPosition:
 		qy = &nodeFunctions{root.functype, nil}
 		*props |= hasPositionProp
+	case FuncLast:
+		qy = &nodeFunctions{root.functype, nil}
+		*props |= hasLastProp
 	default:
 		panic(fmt.Sprintf("The XPath query %s is not supported.", builder.query))
 	}
@@ -269,7 +281,22 @@ func (f *filterQuery) EvaluatePredicate() bool {
 }
 
 func (f *filterQuery) MoveNext() bool {
-	return false
+	return f.Advance() != nil
+}
+
+func (f *filterQuery) Reset() {
+	f.cond.Reset()
+	f.qyInput.Reset()
+}
+
+func (f *filterQuery) Count() int {
+	clone := *f
+	clone.Reset()
+	var count int
+	for clone.MoveNext() {
+		count++
+	}
+	return count
 }
 
 func (f *filterQuery) Current() xpath.Navigator {
@@ -295,10 +322,12 @@ type childrenQuery struct {
 func (c *childrenQuery) Advance() xpath.Navigator {
 	for {
 		if c.movenext == nil {
-			c.currnode = c.qyInput.Advance()
-			if c.currnode == nil {
+			nav := c.qyInput.Advance()
+
+			if nav == nil {
 				return nil
 			}
+			c.currnode = nav.Clone()
 			c.movenext = func() bool {
 				for {
 					if c.position == 0 && !c.currnode.MoveToFirstChild() {
@@ -329,14 +358,32 @@ func (c *childrenQuery) Evaluate(iter NodeIterator) interface{} {
 }
 
 func (c *childrenQuery) MoveNext() bool {
-	return false
+	return c.Advance() != nil
 }
 
 func (c *childrenQuery) Current() xpath.Navigator {
 	return c.currnode
 }
+
 func (c *childrenQuery) CurrentPosition() int {
 	return c.position
+}
+
+func (c *childrenQuery) Reset() {
+	c.currnode = nil
+	c.position = 0
+	c.movenext = nil
+	c.qyInput.Reset()
+}
+
+func (c *childrenQuery) Count() int {
+	clone := *c
+	clone.Reset()
+	var count int
+	for clone.MoveNext() {
+		count++
+	}
+	return count
 }
 
 func childrenSelector(qyInput Query, matches func(xpath.Navigator) bool) Query {
@@ -347,27 +394,29 @@ type attributeQuery struct {
 	qyInput  Query
 	position int
 	matches  func(xpath.Navigator) bool
+
+	onAttr   bool
+	currNode xpath.Navigator
 }
 
 func (a *attributeQuery) Advance() xpath.Navigator {
-	var onAttr bool
-	var currNode xpath.Navigator
+
 	for {
-		if !onAttr {
+		if !a.onAttr {
 			nav := a.qyInput.Advance()
 			if nav == nil {
 				return nil
 			}
 			a.position = 0
-			currNode = nav.Clone()
-			onAttr = currNode.MoveToFirstAttribute()
+			a.currNode = nav.Clone()
+			a.onAttr = a.currNode.MoveToFirstAttribute()
 		} else {
-			onAttr = currNode.MoveToNextAttribute()
+			a.onAttr = a.currNode.MoveToNextAttribute()
 		}
-		if onAttr {
-			if a.matches(currNode) {
+		if a.onAttr {
+			if a.matches(a.currNode) {
 				a.position++
-				return currNode
+				return a.currNode
 			}
 		}
 	}
@@ -379,11 +428,27 @@ func (a *attributeQuery) Evaluate(iter NodeIterator) interface{} {
 }
 
 func (a *attributeQuery) Current() xpath.Navigator {
-	return nil
+	return a.currNode
 }
 
 func (a *attributeQuery) MoveNext() bool {
-	return false
+	return a.Advance() != nil
+}
+
+func (a *attributeQuery) Reset() {
+	a.currNode = nil
+	a.position = 0
+	a.qyInput.Reset()
+}
+
+func (a *attributeQuery) Count() int {
+	clone := *a
+	clone.Reset()
+	var count int
+	for clone.MoveNext() {
+		count++
+	}
+	return count
 }
 
 func (a *attributeQuery) CurrentPosition() int {
@@ -409,9 +474,11 @@ func (d *descendantQuery) Advance() xpath.Navigator {
 		if d.movenext == nil {
 			var first bool = true
 			var level int
-			d.currnode = d.qyInput.Advance()
-			if d.currnode == nil {
+
+			if nav := d.qyInput.Advance(); nav == nil {
 				return nil
+			} else {
+				d.currnode = nav.Clone()
 			}
 			d.movenext = func() bool {
 				if first {
@@ -461,11 +528,28 @@ func (d *descendantQuery) Current() xpath.Navigator {
 }
 
 func (d *descendantQuery) MoveNext() bool {
-	return false
+	return d.Advance() != nil
 }
 
 func (d *descendantQuery) CurrentPosition() int {
 	return d.position
+}
+
+func (d *descendantQuery) Reset() {
+	d.position = 0
+	d.currnode = nil
+	d.movenext = nil
+	d.qyInput.Reset()
+}
+
+func (d *descendantQuery) Count() int {
+	clone := *d
+	clone.Reset()
+	var count int
+	for !clone.MoveNext() {
+		count++
+	}
+	return count
 }
 
 func descendantSelector(qyInput Query, matchSelf bool, matches func(xpath.Navigator) bool) Query {
@@ -490,6 +574,13 @@ func (o *operandQuery) Current() xpath.Navigator {
 
 func (o *operandQuery) MoveNext() bool {
 	return true
+}
+
+func (o *operandQuery) Count() int {
+	return 0
+}
+
+func (o *operandQuery) Reset() {
 }
 
 func (o *operandQuery) CurrentPosition() int {

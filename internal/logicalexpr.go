@@ -44,6 +44,13 @@ func (l *logicalExpr) MoveNext() bool {
 	return false
 }
 
+func (l *logicalExpr) Count() int {
+	return 0
+}
+
+func (l *logicalExpr) Reset() {
+}
+
 func (l *logicalExpr) CurrentPosition() int {
 	return 0
 }

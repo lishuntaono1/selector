@@ -28,6 +28,13 @@ func (e *booleanExpr) MoveNext() bool {
 	return false
 }
 
+func (e *booleanExpr) Count() int {
+	return 0
+}
+func (e *booleanExpr) Reset() {
+
+}
+
 func (e *booleanExpr) CurrentPosition() int {
 	return 0
 }
