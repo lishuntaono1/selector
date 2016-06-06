@@ -3,10 +3,8 @@ package internal
 import "github.com/zhengchun/selector/xpath"
 
 type NodeIterator interface {
-	xpath.NodeIterator
-	Count() int
+	Current() xpath.Navigator
 	Reset()
-	CurrentPosition() int
 }
 
 type XPathSelectionIterator struct {

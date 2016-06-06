@@ -21,7 +21,7 @@ func (e *numericExpr) Evaluate(iter NodeIterator) interface{} {
 	case OpMINUS:
 		return n1 - n2
 	case OpMOD:
-		return int(n1) % int(n2)
+		return float64(int(n1) % int(n2))
 	case OpDIV:
 		return n1 / n2
 	case OpMUL:
@@ -34,15 +34,5 @@ func (e *numericExpr) Current() xpath.Navigator {
 	return nil
 }
 
-func (e *numericExpr) MoveNext() bool {
-	return false
-}
-
-func (e *numericExpr) Count() int {
-	return 0
-}
 func (e *numericExpr) Reset() {
-}
-func (e *numericExpr) CurrentPosition() int {
-	return 0
 }
