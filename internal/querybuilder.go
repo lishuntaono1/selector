@@ -156,7 +156,7 @@ func (builder *QueryBuilder) processFilter(root *Filter, flags Flags, props *Pro
 			}
 		}
 	*/
-	qyInput = &forwardPositionQuery{qyInput: qyInput}
+	//qyInput = &forwardPositionQuery{qyInput: qyInput}
 
 	return &filterQuery{qyInput: qyInput, cond: cond}
 }
