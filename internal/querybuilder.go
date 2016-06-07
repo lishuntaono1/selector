@@ -83,7 +83,7 @@ func (builder *QueryBuilder) processAxis(root *Axis, flags Flags, props *Props) 
 	}
 	switch root.axistype {
 	case AxisChild:
-		if *props&nonFlatProp != 0 {
+		/*if *props&nonFlatProp != 0 {
 			result = &cacheChildrenQuery{
 				childrenQuery: childrenQuery{qyInput: qyInput, matches: matches},
 				elementStk:    &Stack{},
@@ -92,8 +92,8 @@ func (builder *QueryBuilder) processAxis(root *Axis, flags Flags, props *Props) 
 			}
 		} else {
 			result = &childrenQuery{qyInput: qyInput, matches: matches}
-		}
-
+		}*/
+		result = &childrenQuery{qyInput: qyInput, matches: matches}
 	case AxisAncestor:
 		result = &ancestorQuery{parentQuery: parentQuery{qyInput: qyInput, matches: matches}, matchSelf: false}
 		*props |= nonFlatProp
