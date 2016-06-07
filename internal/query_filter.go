@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/zhengchun/selector/xpath"
@@ -39,6 +40,8 @@ func (f *filterQuery) EvaluatePredicate() bool {
 	case reflect.String:
 		return len(v.String()) > 0
 	case reflect.Float64:
+		fmt.Println(v.Float())
+		fmt.Println(iteratorPosition(f.qyInput))
 		return int(v.Float()) == iteratorPosition(f.qyInput)
 	default:
 		if reflect.TypeOf(x).Implements(reflect.TypeOf((*NodeIterator)(nil)).Elem()) {

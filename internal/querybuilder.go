@@ -27,8 +27,9 @@ const (
 )
 
 type QueryBuilder struct {
-	depth int
-	query string
+	depth      int
+	query      string
+	firstInput Query
 }
 
 var canBeNumber = func(t ResultType) bool {
@@ -82,19 +83,35 @@ func (builder *QueryBuilder) processAxis(root *Axis, flags Flags, props *Props) 
 	}
 	switch root.axistype {
 	case AxisChild:
-		result = &childrenQuery{qyInput: qyInput, matches: matches}
+		if *props&nonFlatProp != 0 {
+			result = &cacheChildrenQuery{
+				childrenQuery: childrenQuery{qyInput: qyInput, matches: matches},
+				elementStk:    &Stack{},
+				positionStk:   &Stack{},
+				needInput:     true,
+			}
+		} else {
+			result = &childrenQuery{qyInput: qyInput, matches: matches}
+		}
+
 	case AxisAncestor:
 		result = &ancestorQuery{parentQuery: parentQuery{qyInput: qyInput, matches: matches}, matchSelf: false}
+		*props |= nonFlatProp
 	case AxisAncestorOrSelf:
 		result = &ancestorQuery{parentQuery: parentQuery{qyInput: qyInput, matches: matches}, matchSelf: true}
+		*props |= nonFlatProp
 	case AxisAttribute:
 		result = &attributeQuery{qyInput: qyInput, matches: matches}
 	case AxisDescendant:
 		result = &descendantQuery{qyInput: qyInput, matchSelf: false, matches: matches}
+		*props |= nonFlatProp
 	case AxisDescendantOrSelf:
 		result = &descendantQuery{qyInput: qyInput, matchSelf: true, matches: matches}
+		*props |= nonFlatProp
 	case AxisParent:
 		result = &parentQuery{qyInput: qyInput, matches: matches}
+	case AxisSelf:
+		result = &selfQuery{qyInput: qyInput, matches: matches}
 	default:
 		panic("axis type not supported.")
 	}
@@ -102,7 +119,11 @@ func (builder *QueryBuilder) processAxis(root *Axis, flags Flags, props *Props) 
 }
 
 func (builder *QueryBuilder) processFilter(root *Filter, flags Flags, props *Props) Query {
+	var properties QueryProps
+	properties = NoneQueryProp
+
 	//first := flags&filterFlag == 0
+
 	var propsCond Props
 	cond := builder.processNode(root.condition, noneFlag, &propsCond)
 	if canBeNumber(root.condition.ReturnType()) && (propsCond&(hasPositionProp|hasLastProp)) != 0 {
@@ -121,6 +142,28 @@ func (builder *QueryBuilder) processFilter(root *Filter, flags Flags, props *Pro
 		*props |= posFilterProp
 	}
 
+	/*merging predicates*/
+
+	if builder.firstInput == nil {
+		type BaseAxisQuery struct {
+		}
+		//firstInput, ok := qyInput.(BaseAxisQuery)
+		//if ok {
+		//builder.firstInput = firstInput
+		//}
+	}
+
+	//merge := properties&MergeQueryProp != 0
+	reverse := properties&ReverseQueryProp != 0
+
+	if propsCond&hasPositionProp != 0 {
+		if reverse {
+			//qyInput = new ReversePositionQuery(qyInput)
+			panic("ReversePositionQuery not implemented.")
+		} else if propsCond&hasLastProp != 0 {
+			qyInput = &forwardPositionQuery{qyInput: qyInput}
+		}
+	}
 	return &filterQuery{qyInput: qyInput, cond: cond}
 }
 

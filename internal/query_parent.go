@@ -60,7 +60,7 @@ func (p *parentQuery) Current() xpath.Navigator {
 }
 
 func (p *parentQuery) Count() int {
-	return len(p.outputBuffer)
+	return p.count
 }
 
 func (p *parentQuery) CurrentPosition() int {

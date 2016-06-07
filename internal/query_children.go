@@ -8,11 +8,13 @@ type childrenQuery struct {
 	movenext func() bool
 	matches  func(xpath.Navigator) bool
 	currnode xpath.Navigator
+	attr     bool
 }
 
 func (c *childrenQuery) Advance() xpath.Navigator {
 	for {
 		if c.movenext == nil {
+			c.attr = false
 			nav := c.qyInput.Advance()
 
 			if nav == nil {
@@ -21,13 +23,13 @@ func (c *childrenQuery) Advance() xpath.Navigator {
 			c.currnode = nav.Clone()
 			c.movenext = func() bool {
 				for {
-					if c.position == 0 && !c.currnode.MoveToFirstChild() {
+					if !c.attr && !c.currnode.MoveToFirstChild() {
 						return false
-					} else if c.position > 0 && !c.currnode.MoveToNext() {
+					} else if c.attr && !c.currnode.MoveToNext() {
 						c.currnode.MoveToParent()
 						return false
 					}
-					c.position++
+					c.attr = true
 					if c.matches(c.currnode) {
 						return true
 					}
@@ -35,9 +37,9 @@ func (c *childrenQuery) Advance() xpath.Navigator {
 			}
 		}
 		if c.movenext() {
+			c.position++
 			return c.currnode
 		} else {
-			c.position = 0
 			c.movenext = nil
 		}
 	}
@@ -64,6 +66,7 @@ func (c *childrenQuery) Reset() {
 	c.currnode = nil
 	c.position = 0
 	c.movenext = nil
+	c.attr = false
 	c.qyInput.Reset()
 }
 

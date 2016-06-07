@@ -25,7 +25,7 @@ func (f *nodeFunctions) Evaluate(context NodeIterator) interface{} {
 	case FuncPosition:
 		return float64(iteratorPosition(context))
 	case FuncLast:
-		return iteratorCount(context)
+		return float64(iteratorCount(context))
 	case FuncName:
 		argVal := f.evaluateArg(context)
 		if argVal != nil {
