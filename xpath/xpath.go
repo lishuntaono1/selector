@@ -2,6 +2,15 @@ package xpath
 
 type NodeType uint
 
+type XmlNodeOrder uint
+
+const (
+	XmlNodeOrderBefore XmlNodeOrder = iota
+	XmlNodeOrderAfter
+	XmlNodeOrderSame
+	XmlNodeOrderUnknown
+)
+
 const (
 	RootNode NodeType = iota
 	ElementNode
@@ -16,11 +25,14 @@ const (
 )
 
 type Navigator interface {
+	BaseURI() string
 	LocalName() string
 	Value() string
 	Prefix() string
 	NodeType() NodeType
 	Clone() Navigator
+	IsSamePosition(Navigator) bool
+	ComparePosition(Navigator) XmlNodeOrder
 
 	MoveTo(Navigator) bool
 	MoveToRoot()

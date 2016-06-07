@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/zhengchun/selector/xpath"
 )
@@ -26,7 +27,9 @@ const (
 )
 
 type QueryBuilder struct {
-	depth int
+	depth      int
+	query      string
+	firstInput Query
 }
 
 var canBeNumber = func(t ResultType) bool {
@@ -62,10 +65,10 @@ func (builder *QueryBuilder) processAxis(root *Axis, flags Flags, props *Props) 
 					if input.input != nil {
 						qyGrandInput = builder.processNode(input.input, smartDescFlag, props)
 					} else {
-						qyGrandInput = contextSelector()
+						qyGrandInput = &contextQuery{}
 						*props = noneProp
 					}
-					result = descendantSelector(qyGrandInput, false, matches)
+					result = &descendantQuery{qyInput: qyGrandInput, matchSelf: false, matches: matches}
 					return result
 				}
 			}
@@ -75,22 +78,40 @@ func (builder *QueryBuilder) processAxis(root *Axis, flags Flags, props *Props) 
 		}
 		qyInput = builder.processNode(root.input, flags, props)
 	} else {
-		qyInput = contextSelector()
+		qyInput = &contextQuery{}
 		*props = noneProp
 	}
 	switch root.axistype {
 	case AxisChild:
-		result = childrenSelector(qyInput, matches)
+		/*if *props&nonFlatProp != 0 {
+			result = &cacheChildrenQuery{
+				childrenQuery: childrenQuery{qyInput: qyInput, matches: matches},
+				elementStk:    &Stack{},
+				positionStk:   &Stack{},
+				needInput:     true,
+			}
+		} else {
+			result = &childrenQuery{qyInput: qyInput, matches: matches}
+		}*/
+		result = &childrenQuery{qyInput: qyInput, matches: matches}
 	case AxisAncestor:
-		result = ancestorSelector(qyInput, false, matches)
+		result = &ancestorQuery{parentQuery: parentQuery{qyInput: qyInput, matches: matches}, matchSelf: false}
+		*props |= nonFlatProp
 	case AxisAncestorOrSelf:
-		result = ancestorSelector(qyInput, true, matches)
+		result = &ancestorQuery{parentQuery: parentQuery{qyInput: qyInput, matches: matches}, matchSelf: true}
+		*props |= nonFlatProp
 	case AxisAttribute:
-		result = attributeSelector(qyInput, matches)
+		result = &attributeQuery{qyInput: qyInput, matches: matches}
 	case AxisDescendant:
-		result = descendantSelector(qyInput, false, matches)
+		result = &descendantQuery{qyInput: qyInput, matchSelf: false, matches: matches}
+		*props |= nonFlatProp
 	case AxisDescendantOrSelf:
-		result = descendantSelector(qyInput, true, matches)
+		result = &descendantQuery{qyInput: qyInput, matchSelf: true, matches: matches}
+		*props |= nonFlatProp
+	case AxisParent:
+		result = &parentQuery{qyInput: qyInput, matches: matches}
+	case AxisSelf:
+		result = &selfQuery{qyInput: qyInput, matches: matches}
 	default:
 		panic("axis type not supported.")
 	}
@@ -98,7 +119,11 @@ func (builder *QueryBuilder) processAxis(root *Axis, flags Flags, props *Props) 
 }
 
 func (builder *QueryBuilder) processFilter(root *Filter, flags Flags, props *Props) Query {
+	var properties QueryProps
+	properties = NoneQueryProp
+
 	//first := flags&filterFlag == 0
+
 	var propsCond Props
 	cond := builder.processNode(root.condition, noneFlag, &propsCond)
 	if canBeNumber(root.condition.ReturnType()) && (propsCond&(hasPositionProp|hasLastProp)) != 0 {
@@ -116,34 +141,80 @@ func (builder *QueryBuilder) processFilter(root *Filter, flags Flags, props *Pro
 		// this condition is positional rightmost filter should be avare of this.
 		*props |= posFilterProp
 	}
+
 	/*merging predicates*/
-	return filterSelector(qyInput, cond, propsCond&hasPositionProp == 0, nil)
+
+	if builder.firstInput == nil {
+		type BaseAxisQuery struct {
+		}
+		//firstInput, ok := qyInput.(BaseAxisQuery)
+		//if ok {
+		//builder.firstInput = firstInput
+		//}
+	}
+
+	//merge := properties&MergeQueryProp != 0
+	reverse := properties&ReverseQueryProp != 0
+
+	if propsCond&hasPositionProp != 0 {
+		if reverse {
+			//qyInput = new ReversePositionQuery(qyInput)
+			panic("ReversePositionQuery not implemented.")
+		} else if propsCond&hasLastProp != 0 {
+			qyInput = &forwardPositionQuery{qyInput: qyInput}
+		}
+	}
+	return &filterQuery{qyInput: qyInput, cond: cond}
 }
 
 func (builder *QueryBuilder) processOperator(root *Operator, flags Flags, props *Props) Query {
 	var props1, props2 Props
+
 	op1 := builder.processNode(root.opnd1, noneFlag, &props1)
 	op2 := builder.processNode(root.opnd2, noneFlag, &props2)
-
-	return logicalSelector(root.op, op1, op2)
-
-	/*
-		*props = props1 | props2
-		switch root.op {
-		case OpPLUS, OpMINUS, OpMUL, OpMOD, OpDIV:
-			//Numeric
-		case OpLT, OpGT, OpLE, OpGE, OpEQ, OpNE:
-			//Logical
-		case OpOR, OpAND:
-			//Boolean
-		case OpUNION:
-			*props |= nonFlatProp
-			//return new UnionExpr(op1, op2);
-		default:
-			return nil
+	*props = props1 | props2
+	switch root.op {
+	case OpPLUS, OpMINUS, OpMUL, OpMOD, OpDIV:
+		return &numericExpr{root.op, op1, op2}
+	case OpLT, OpGT, OpLE, OpGE, OpEQ, OpNE:
+		return &logicalExpr{root.op, op1, op2}
+	case OpOR, OpAND:
+		if root.opnd1.ReturnType() != BooleanType {
+			//BooleanFunctions
 		}
-	*/
+		if root.opnd2.ReturnType() != BooleanType {
+			// /BooleanFunctions
+		}
+		return &booleanExpr{root.op == OpOR, op1, op2}
+	case OpUNION:
+		*props |= nonFlatProp
+		return &unionExpr{qy1: op1, qy2: op2}
+	}
+	return nil
+}
 
+func (builder *QueryBuilder) processFunction(root *Function, flags Flags, props *Props) Query {
+	*props = noneProp
+	var qy Query
+	switch root.functype {
+	case FuncPosition:
+		qy = &nodeFunctions{root.functype, nil}
+		*props |= hasPositionProp
+	case FuncLast:
+		qy = &nodeFunctions{root.functype, nil}
+		*props |= hasLastProp
+	case FuncCount:
+		return &nodeFunctions{root.functype, builder.processNode(root.argument[0], flags, props)}
+	case FuncName, FuncNameSpaceUri, FuncLocalName:
+		if len(root.argument) > 0 {
+			return &nodeFunctions{root.functype, builder.processNode(root.argument[0], flags, props)}
+		} else {
+			return &nodeFunctions{root.functype, nil}
+		}
+	default:
+		panic(fmt.Sprintf("The XPath query %s is not supported.", builder.query))
+	}
+	return qy
 }
 
 func (builder *QueryBuilder) processNode(root AstNode, flags Flags, props *Props) Query {
@@ -160,8 +231,10 @@ func (builder *QueryBuilder) processNode(root AstNode, flags Flags, props *Props
 		result = builder.processOperator(root.(*Operator), flags, props)
 	case ConstantOperandAst:
 		result = &operandQuery{(root.(*Operand).val)}
+	case FunctionAst:
+		result = builder.processFunction(root.(*Function), flags, props)
 	case RootAst:
-		result = absoluteSelector()
+		result = &absoluteQuery{}
 	default:
 		panic("Unknown QueryType encountered!!")
 	}
@@ -177,207 +250,19 @@ func (builder *QueryBuilder) Build(xpath string) Query {
 	return builder.build(ParseXPathExpression(xpath))
 }
 
-func contextSelector() selector {
-	var count = 0
-	return func(nav xpath.Navigator) bool {
-		if count == 0 {
-			count = 1
-			return true
-		}
-		return false
-	}
-}
-
-func absoluteSelector() selector {
-	return contextSelector()
-}
-
-func logicalSelector(op OpType, opnd1, opnd2 Query) selector {
-	return func(nav xpath.Navigator) bool {
-
-		if !(opnd1.Matches(nav) && opnd2.Matches(nav)) {
-			return false
-		}
-		type Evaluate interface {
-			Evaluate(xpath.Navigator) interface{}
-		}
-		var val1, val2 interface{}
-		if eval, ok := opnd1.(Evaluate); ok {
-			val1 = eval.Evaluate(nav)
-		} else {
-			val1 = nav.Value() // string
-		}
-		if eval, ok := opnd2.(Evaluate); ok {
-			val2 = eval.Evaluate(nav)
-		} else {
-			val2 = nav.Value() // string
-		}
-
-		fmt.Println(val1.(string))
-
-		switch op {
-		case OpEQ: // `=`
-			return val1.(string) == val2.(string)
-		}
-		return false
-	}
-}
-
-func filterSelector(qyInput Query, cond Query, noPosition bool, matches func(xpath.Navigator) bool) selector {
-	return func(nav xpath.Navigator) bool {
-		for {
-			if !qyInput.Matches(nav) {
-				return false
-			}
-			if cond.Matches(nav) {
-				return true
-			}
+func getXPathType(v interface{}) ResultType {
+	vt := reflect.ValueOf(v)
+	switch vt.Kind() {
+	case reflect.Bool:
+		return BooleanType
+	case reflect.Float64:
+		return NumberType
+	case reflect.String:
+		return StringType
+	default:
+		if _, ok := v.(NodeIterator); ok {
+			return NodeSetType
 		}
 	}
-}
-
-func childrenSelector(qyInput Query, matches func(xpath.Navigator) bool) selector {
-	var movenext func() bool
-	var position = 0
-	return func(nav xpath.Navigator) bool {
-		for {
-			if movenext == nil {
-				if !qyInput.Matches(nav) {
-					return false
-				}
-				movenext = func() bool {
-					fmt.Println(nav.LocalName())
-					for {
-						if position == 0 && !nav.MoveToFirstChild() {
-							return false
-						} else if position > 0 && !nav.MoveToNext() {
-							nav.MoveToParent()
-							return false
-						}
-						position++
-						if matches(nav) {
-							return true
-						}
-					}
-				}
-			}
-			if movenext() {
-				return true
-			} else {
-				position = 0
-				movenext = nil
-			}
-		}
-	}
-}
-
-func descendantSelector(qyInput Query, matchSelf bool, matches func(xpath.Navigator) bool) selector {
-	var movenext func() bool
-
-	return func(nav xpath.Navigator) bool {
-		for {
-			if movenext == nil {
-				var first bool = true
-				var level int
-
-				if !qyInput.Matches(nav) {
-					return false
-				}
-				movenext = func() bool {
-					if first {
-						first = false
-						if matchSelf && matches(nav) {
-							return true
-						}
-					}
-					for {
-						if nav.MoveToFirstChild() {
-							level++
-						} else {
-							for {
-								if level == 0 {
-									return false
-								}
-								if nav.MoveToNext() {
-									break
-								}
-								nav.MoveToParent()
-								level--
-							}
-						}
-						if matches(nav) {
-							return true
-						}
-					}
-				}
-			}
-
-			if movenext() {
-				return true
-			} else {
-				movenext = nil
-			}
-		}
-
-	}
-}
-
-func attributeSelector(qyInput Query, matches func(xpath.Navigator) bool) selector {
-	return func(nav xpath.Navigator) bool {
-		var onAttr bool
-		var currNode xpath.Navigator
-		for {
-			if !onAttr {
-				if !qyInput.Matches(nav) {
-					return false
-				}
-				currNode = nav.Clone()
-				onAttr = currNode.MoveToFirstAttribute()
-			} else {
-				onAttr = currNode.MoveToNextAttribute()
-			}
-			if onAttr {
-				if matches(currNode) {
-					nav.MoveTo(currNode)
-					return true
-				}
-			}
-		}
-	}
-}
-
-func ancestorSelector(qyInput Query, matchSelf bool, matches func(xpath.Navigator) bool) selector {
-	var ancestor xpath.Navigator
-	return func(nav xpath.Navigator) bool {
-		for {
-			if !qyInput.Matches(nav) {
-				return false
-			}
-			if matchSelf {
-
-			}
-			if ancestor == nil {
-				ancestor = nav.Clone()
-			}
-			for ancestor.MoveToParent() {
-				if matches(ancestor) {
-					nav.MoveTo(ancestor)
-					return true
-				}
-			}
-			ancestor = nil
-		}
-	}
-}
-
-type operandQuery struct {
-	val interface{}
-}
-
-func (o *operandQuery) Matches(nav xpath.Navigator) bool {
-	return true
-}
-
-func (o *operandQuery) Evaluate(nav xpath.Navigator) interface{} {
-	return o.val
+	return StringType
 }
