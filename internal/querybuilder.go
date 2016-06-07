@@ -83,7 +83,7 @@ func (builder *QueryBuilder) processAxis(root *Axis, flags Flags, props *Props) 
 	}
 	switch root.axistype {
 	case AxisChild:
-		/*if *props&nonFlatProp != 0 {
+		if *props&nonFlatProp != 0 {
 			result = &cacheChildrenQuery{
 				childrenQuery: childrenQuery{qyInput: qyInput, matches: matches},
 				elementStk:    &Stack{},
@@ -92,8 +92,8 @@ func (builder *QueryBuilder) processAxis(root *Axis, flags Flags, props *Props) 
 			}
 		} else {
 			result = &childrenQuery{qyInput: qyInput, matches: matches}
-		}*/
-		result = &childrenQuery{qyInput: qyInput, matches: matches}
+		}
+		//result = &childrenQuery{qyInput: qyInput, matches: matches}
 	case AxisAncestor:
 		result = &ancestorQuery{parentQuery: parentQuery{qyInput: qyInput, matches: matches}, matchSelf: false}
 		*props |= nonFlatProp
@@ -119,8 +119,8 @@ func (builder *QueryBuilder) processAxis(root *Axis, flags Flags, props *Props) 
 }
 
 func (builder *QueryBuilder) processFilter(root *Filter, flags Flags, props *Props) Query {
-	var properties QueryProps
-	properties = NoneQueryProp
+	//var properties QueryProps
+	//properties = NoneQueryProp
 
 	//first := flags&filterFlag == 0
 
@@ -144,26 +144,20 @@ func (builder *QueryBuilder) processFilter(root *Filter, flags Flags, props *Pro
 
 	/*merging predicates*/
 
-	if builder.firstInput == nil {
-		type BaseAxisQuery struct {
-		}
-		//firstInput, ok := qyInput.(BaseAxisQuery)
-		//if ok {
-		//builder.firstInput = firstInput
-		//}
-	}
+	/*
+		reverse := properties&ReverseQueryProp != 0
 
-	//merge := properties&MergeQueryProp != 0
-	reverse := properties&ReverseQueryProp != 0
-
-	if propsCond&hasPositionProp != 0 {
-		if reverse {
-			//qyInput = new ReversePositionQuery(qyInput)
-			panic("ReversePositionQuery not implemented.")
-		} else if propsCond&hasLastProp != 0 {
-			qyInput = &forwardPositionQuery{qyInput: qyInput}
+		if propsCond&hasPositionProp != 0 {
+			if reverse {
+				//qyInput = new ReversePositionQuery(qyInput)
+				panic("ReversePositionQuery not implemented.")
+			} else if propsCond&hasLastProp != 0 {
+				qyInput = &forwardPositionQuery{qyInput: qyInput}
+			}
 		}
-	}
+	*/
+	qyInput = &forwardPositionQuery{qyInput: qyInput}
+
 	return &filterQuery{qyInput: qyInput, cond: cond}
 }
 

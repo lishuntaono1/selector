@@ -5,40 +5,75 @@ import "github.com/zhengchun/selector/xpath"
 type childrenQuery struct {
 	qyInput  Query
 	position int
-	movenext func() bool
+	movenext func() (xpath.Navigator, bool)
 	matches  func(xpath.Navigator) bool
 	currnode xpath.Navigator
-	attr     bool
+
+	firstChild bool
 }
 
 func (c *childrenQuery) Advance() xpath.Navigator {
-	for {
-		if c.movenext == nil {
-			c.attr = false
+	/*
+		for {
 			nav := c.qyInput.Advance()
-
 			if nav == nil {
 				return nil
 			}
-			c.currnode = nav.Clone()
-			c.movenext = func() bool {
-				for {
-					if !c.attr && !c.currnode.MoveToFirstChild() {
-						return false
-					} else if c.attr && !c.currnode.MoveToNext() {
-						c.currnode.MoveToParent()
-						return false
+			var firstChild = false
+			for {
+				if !firstChild {
+					firstChild = true
+					if !nav.MoveToFirstChild() {
+						break
 					}
-					c.attr = true
-					if c.matches(c.currnode) {
-						return true
+				} else {
+					if !nav.MoveToNext() {
+						break
+					}
+				}
+				if c.matches(nav) {
+					c.position++
+					return nav
+				}
+			}
+			c.position = 0
+		}
+
+	*/
+
+	for {
+		if c.movenext == nil {
+			c.position = 0
+			c.firstChild = false
+			nav := c.qyInput.Advance()
+			if nav == nil {
+				return nil
+			}
+			//nav = nav.Clone()
+			c.movenext = func() (xpath.Navigator, bool) {
+				for {
+					if !c.firstChild {
+						c.firstChild = true
+						if !nav.MoveToFirstChild() {
+							return nil, false
+						}
+					} else {
+						if !nav.MoveToNext() {
+							return nil, false
+						}
+					}
+					if c.matches(nav) {
+						c.position++
+						c.currnode = nav
+						return c.currnode, true
 					}
 				}
 			}
 		}
-		if c.movenext() {
+		if nav, ok := c.movenext(); ok {
 			c.position++
-			return c.currnode
+			c.currnode = nav
+			return nav
 		} else {
 			c.movenext = nil
 		}
@@ -64,9 +99,8 @@ func (c *childrenQuery) CurrentPosition() int {
 
 func (c *childrenQuery) Reset() {
 	c.currnode = nil
-	c.position = 0
 	c.movenext = nil
-	c.attr = false
+	c.firstChild = false
 	c.qyInput.Reset()
 }
 
