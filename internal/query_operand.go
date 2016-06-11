@@ -2,21 +2,21 @@ package internal
 
 import "github.com/zhengchun/selector/xpath"
 
-type operandQuery struct {
+type OperandQuery struct {
 	val interface{}
 }
 
-func (o *operandQuery) Advance() xpath.Navigator {
+func (o *OperandQuery) Advance() xpath.Navigator {
 	return nil
 }
 
-func (o *operandQuery) Evaluate(iter NodeIterator) interface{} {
+func (o *OperandQuery) Evaluate(context NodeIterator) interface{} {
 	return o.val
 }
 
-func (o *operandQuery) Current() xpath.Navigator {
+func (o *OperandQuery) Current() xpath.Navigator {
 	return nil
 }
 
-func (o *operandQuery) Reset() {
+func (o *OperandQuery) Reset() {
 }

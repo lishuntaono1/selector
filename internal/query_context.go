@@ -2,33 +2,29 @@ package internal
 
 import "github.com/zhengchun/selector/xpath"
 
-type contextQuery struct {
-	count int
-	nav   xpath.Navigator
+type ContextQuery struct {
+	count    int
+	currNode xpath.Navigator
 }
 
-func (c *contextQuery) Advance() xpath.Navigator {
+func (c *ContextQuery) Advance() xpath.Navigator {
 	if c.count == 0 {
 		c.count = 1
-		return c.nav
+		return c.currNode
 	}
 	return nil
 }
 
-func (c *contextQuery) Evaluate(iter NodeIterator) interface{} {
-	c.nav = iter.Current()
+func (c *ContextQuery) Evaluate(iter NodeIterator) interface{} {
+	c.currNode = iter.Current()
 	c.count = 0
 	return c
 }
 
-func (c *contextQuery) MoveNext() bool {
-	return c.Advance() != nil
-}
-
-func (c *contextQuery) Reset() {
+func (c *ContextQuery) Reset() {
 	c.count = 0
 }
 
-func (c *contextQuery) Current() xpath.Navigator {
-	return c.nav
+func (c *ContextQuery) Current() xpath.Navigator {
+	return c.currNode
 }

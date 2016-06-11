@@ -1,37 +1,31 @@
 package internal
 
 import (
-	"fmt"
 	"reflect"
 
 	"github.com/zhengchun/selector/xpath"
 )
 
-type filterQuery struct {
-	qyInput  Query
-	cond     Query
-	currnode xpath.Navigator
+type FilterQuery struct {
+	BaseAxisQuery
+
+	cond Query
 }
 
-func (f *filterQuery) Advance() xpath.Navigator {
+func (f *FilterQuery) Advance() xpath.Navigator {
 	for {
 		nav := f.qyInput.Advance()
 		if nav == nil {
 			return nil
 		}
-		f.currnode = nav
+		f.currNode = nav
 		if f.EvaluatePredicate() {
 			return nav
 		}
 	}
 }
 
-func (f *filterQuery) Evaluate(iter NodeIterator) interface{} {
-	f.qyInput.Evaluate(iter)
-	return f
-}
-
-func (f *filterQuery) EvaluatePredicate() bool {
+func (f *FilterQuery) EvaluatePredicate() bool {
 	var x = f.cond.Evaluate(f.qyInput)
 	v := reflect.ValueOf(x)
 	switch v.Kind() {
@@ -40,8 +34,6 @@ func (f *filterQuery) EvaluatePredicate() bool {
 	case reflect.String:
 		return len(v.String()) > 0
 	case reflect.Float64:
-		fmt.Println(v.Float())
-		fmt.Println(iteratorPosition(f.qyInput))
 		return int(v.Float()) == iteratorPosition(f.qyInput)
 	default:
 		if reflect.TypeOf(x).Implements(reflect.TypeOf((*NodeIterator)(nil)).Elem()) {
@@ -51,25 +43,7 @@ func (f *filterQuery) EvaluatePredicate() bool {
 	return false
 }
 
-func (f *filterQuery) MoveNext() bool {
-	return f.Advance() != nil
-}
-
-func (f *filterQuery) Reset() {
+func (f *FilterQuery) Reset() {
 	f.cond.Reset()
-	f.qyInput.Reset()
-}
-
-func (f *filterQuery) Count() int {
-	clone := *f
-	clone.Reset()
-	var count int
-	for clone.MoveNext() {
-		count++
-	}
-	return count
-}
-
-func (f *filterQuery) Current() xpath.Navigator {
-	return f.currnode
+	f.BaseAxisQuery.Reset()
 }

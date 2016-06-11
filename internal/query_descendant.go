@@ -2,94 +2,77 @@ package internal
 
 import "github.com/zhengchun/selector/xpath"
 
-type descendantQuery struct {
-	qyInput   Query
-	matchSelf bool
-	matches   func(xpath.Navigator) bool
-	position  int
+type DescendantQuery struct {
+	BaseAxisQuery
 
-	movenext func() bool
-	currnode xpath.Navigator
+	self     bool
+	iterator func() (xpath.Navigator, bool)
 }
 
-func (d *descendantQuery) Advance() xpath.Navigator {
+func (d *DescendantQuery) Advance() xpath.Navigator {
 	for {
-		if d.movenext == nil {
+		if d.iterator == nil {
 			var first bool = true
 			var level int
 
-			if nav := d.qyInput.Advance(); nav == nil {
+			nav := d.qyInput.Advance()
+			if nav == nil {
 				return nil
-			} else {
-				d.currnode = nav.Clone()
 			}
-			d.movenext = func() bool {
+			nav = nav.Clone()
+			d.iterator = func() (xpath.Navigator, bool) {
 				if first {
 					first = false
-					if d.matchSelf && d.matches(d.currnode) {
+					if d.self && d.matches(nav) {
 						d.position = 1
-						return true
+						return nav, true
 					}
 				}
 				for {
-					if d.currnode.MoveToFirstChild() {
+					if nav.MoveToFirstChild() {
 						level++
 					} else {
 						for {
 							if level == 0 {
-								return false
+								return nil, false
 							}
-							if d.currnode.MoveToNext() {
+							if nav.MoveToNext() {
 								break
 							}
-							d.currnode.MoveToParent()
+							nav.MoveToParent()
 							level--
 						}
 					}
-					if d.matches(d.currnode) {
-						return true
+					if d.matches(nav) {
+						return nav, true
 					}
 				}
 			}
 		}
-		if d.movenext() {
+		if nav, ok := d.iterator(); ok {
 			d.position++
-			return d.currnode
+			d.currNode = nav
+			return nav
 		} else {
-			d.movenext = nil
+			d.iterator = nil
 		}
 	}
 }
 
-func (d *descendantQuery) Evaluate(ctx NodeIterator) interface{} {
-	d.qyInput.Evaluate(ctx)
-	return d
+func (d *DescendantQuery) Reset() {
+	d.iterator = nil
+	d.BaseAxisQuery.Reset()
 }
 
-func (d *descendantQuery) Current() xpath.Navigator {
-	return d.currnode
-}
-
-func (d *descendantQuery) MoveNext() bool {
+func (d *DescendantQuery) moveNext() bool {
 	return d.Advance() != nil
 }
 
-func (d *descendantQuery) CurrentPosition() int {
-	return d.position
-}
-
-func (d *descendantQuery) Reset() {
-	d.position = 0
-	d.currnode = nil
-	d.movenext = nil
-	d.qyInput.Reset()
-}
-
-func (d *descendantQuery) Count() int {
+func (d *DescendantQuery) Count() int {
 	clone := *d
 	clone.Reset()
 	var count int
-	for !clone.MoveNext() {
+	for clone.moveNext() {
 		count++
 	}
 	return count

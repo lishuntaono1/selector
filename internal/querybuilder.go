@@ -65,10 +65,11 @@ func (builder *QueryBuilder) processAxis(root *Axis, flags Flags, props *Props) 
 					if input.input != nil {
 						qyGrandInput = builder.processNode(input.input, smartDescFlag, props)
 					} else {
-						qyGrandInput = &contextQuery{}
+						qyGrandInput = &ContextQuery{}
 						*props = noneProp
 					}
-					result = &descendantQuery{qyInput: qyGrandInput, matchSelf: false, matches: matches}
+					result = &DescendantQuery{
+						BaseAxisQuery: BaseAxisQuery{qyInput: qyGrandInput, matches: matches}}
 					return result
 				}
 			}
@@ -78,40 +79,60 @@ func (builder *QueryBuilder) processAxis(root *Axis, flags Flags, props *Props) 
 		}
 		qyInput = builder.processNode(root.input, flags, props)
 	} else {
-		qyInput = &contextQuery{}
+		qyInput = &ContextQuery{}
 		*props = noneProp
 	}
 	switch root.axistype {
 	case AxisChild:
-		if *props&nonFlatProp != 0 {
-			result = &cacheChildrenQuery{
-				childrenQuery: childrenQuery{qyInput: qyInput, matches: matches},
-				elementStk:    &Stack{},
-				positionStk:   &Stack{},
-				needInput:     true,
-			}
-		} else {
-			result = &childrenQuery{qyInput: qyInput, matches: matches}
-		}
+		/*
+			if *props&nonFlatProp != 0 {
+				result = &cacheChildrenQuery{
+					childrenQuery: childrenQuery{qyInput: qyInput, matches: matches},
+					elementStk:    &Stack{},
+					positionStk:   &Stack{},
+					needInput:     true,
+				}
+			} else {
+		*/result = &ChildrenQuery{BaseAxisQuery: BaseAxisQuery{qyInput: qyInput, matches: matches}}
+		//}
 		//result = &childrenQuery{qyInput: qyInput, matches: matches}
 	case AxisAncestor:
-		result = &ancestorQuery{parentQuery: parentQuery{qyInput: qyInput, matches: matches}, matchSelf: false}
+		result = &ancestorQuery{
+			ParentQuery: ParentQuery{
+				CacheAxisQuery: CacheAxisQuery{BaseAxisQuery: BaseAxisQuery{qyInput: qyInput, matches: matches},
+					buff: make([]xpath.Navigator, 0)},
+			},
+		}
 		*props |= nonFlatProp
 	case AxisAncestorOrSelf:
-		result = &ancestorQuery{parentQuery: parentQuery{qyInput: qyInput, matches: matches}, matchSelf: true}
+		result = &ancestorQuery{
+			ParentQuery: ParentQuery{
+				CacheAxisQuery: CacheAxisQuery{BaseAxisQuery: BaseAxisQuery{qyInput: qyInput, matches: matches},
+					buff: make([]xpath.Navigator, 0)},
+			},
+			self: true,
+		}
 		*props |= nonFlatProp
 	case AxisAttribute:
-		result = &attributeQuery{qyInput: qyInput, matches: matches}
+		result = &AttributeQuery{
+			BaseAxisQuery: BaseAxisQuery{qyInput: qyInput, matches: matches}, // AxisQuery
+		}
 	case AxisDescendant:
-		result = &descendantQuery{qyInput: qyInput, matchSelf: false, matches: matches}
+		result = &DescendantQuery{
+			BaseAxisQuery: BaseAxisQuery{qyInput: qyInput, matches: matches},
+		}
 		*props |= nonFlatProp
 	case AxisDescendantOrSelf:
-		result = &descendantQuery{qyInput: qyInput, matchSelf: true, matches: matches}
+		result = &DescendantQuery{
+			BaseAxisQuery: BaseAxisQuery{qyInput: qyInput, matches: matches}, self: true}
 		*props |= nonFlatProp
 	case AxisParent:
-		result = &parentQuery{qyInput: qyInput, matches: matches}
+		result = &ParentQuery{
+			CacheAxisQuery: CacheAxisQuery{BaseAxisQuery: BaseAxisQuery{qyInput: qyInput, matches: matches},
+				buff: make([]xpath.Navigator, 0)},
+		}
 	case AxisSelf:
-		result = &selfQuery{qyInput: qyInput, matches: matches}
+		result = &SelfQuery{BaseAxisQuery: BaseAxisQuery{qyInput: qyInput, matches: matches}}
 	default:
 		panic("axis type not supported.")
 	}
@@ -158,7 +179,7 @@ func (builder *QueryBuilder) processFilter(root *Filter, flags Flags, props *Pro
 	*/
 	//qyInput = &forwardPositionQuery{qyInput: qyInput}
 
-	return &filterQuery{qyInput: qyInput, cond: cond}
+	return &FilterQuery{BaseAxisQuery: BaseAxisQuery{qyInput: qyInput}, cond: cond}
 }
 
 func (builder *QueryBuilder) processOperator(root *Operator, flags Flags, props *Props) Query {
@@ -224,11 +245,11 @@ func (builder *QueryBuilder) processNode(root AstNode, flags Flags, props *Props
 	case OperatorAst:
 		result = builder.processOperator(root.(*Operator), flags, props)
 	case ConstantOperandAst:
-		result = &operandQuery{(root.(*Operand).val)}
+		result = &OperandQuery{(root.(*Operand).val)}
 	case FunctionAst:
 		result = builder.processFunction(root.(*Function), flags, props)
 	case RootAst:
-		result = &absoluteQuery{}
+		result = &AbsoluteQuery{}
 	default:
 		panic("Unknown QueryType encountered!!")
 	}

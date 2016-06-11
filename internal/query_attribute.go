@@ -2,17 +2,13 @@ package internal
 
 import "github.com/zhengchun/selector/xpath"
 
-type attributeQuery struct {
-	qyInput  Query
-	position int
-	matches  func(xpath.Navigator) bool
+type AttributeQuery struct {
+	BaseAxisQuery
 
-	onAttr   bool
-	currNode xpath.Navigator
+	onAttr bool
 }
 
-func (a *attributeQuery) Advance() xpath.Navigator {
-
+func (a *AttributeQuery) Advance() xpath.Navigator {
 	for {
 		if !a.onAttr {
 			nav := a.qyInput.Advance()
@@ -34,35 +30,13 @@ func (a *attributeQuery) Advance() xpath.Navigator {
 	}
 }
 
-func (a *attributeQuery) Evaluate(iter NodeIterator) interface{} {
-	a.qyInput.Evaluate(iter)
+func (a *AttributeQuery) Evaluate(context NodeIterator) interface{} {
+	a.Reset()
+	a.qyInput.Evaluate(context)
 	return a
 }
 
-func (a *attributeQuery) Current() xpath.Navigator {
-	return a.currNode
-}
-
-func (a *attributeQuery) MoveNext() bool {
-	return a.Advance() != nil
-}
-
-func (a *attributeQuery) Reset() {
-	a.currNode = nil
-	a.position = 0
-	a.qyInput.Reset()
-}
-
-func (a *attributeQuery) Count() int {
-	clone := *a
-	clone.Reset()
-	var count int
-	for clone.MoveNext() {
-		count++
-	}
-	return count
-}
-
-func (a *attributeQuery) CurrentPosition() int {
-	return a.position
+func (a *AttributeQuery) Reset() {
+	a.onAttr = false
+	a.BaseAxisQuery.Reset()
 }

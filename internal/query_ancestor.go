@@ -2,10 +2,9 @@ package internal
 
 import "github.com/zhengchun/selector/xpath"
 
-// ancestorQuery is the axis query with cache.
 type ancestorQuery struct {
-	parentQuery
-	matchSelf bool
+	ParentQuery
+	self bool
 }
 
 func (a *ancestorQuery) Evaluate(context NodeIterator) interface{} {
@@ -18,13 +17,13 @@ func (a *ancestorQuery) Evaluate(context NodeIterator) interface{} {
 		if input == nil {
 			break
 		}
-		if a.matchSelf {
+		if a.self {
 			if a.matches(input) {
-				b, ok := insertNode(a.outputBuffer, input)
+				b, ok := insertNode(a.buff, input)
 				if !ok {
 					continue
 				}
-				a.outputBuffer = b
+				a.buff = b
 			}
 		}
 		if ancestor == nil || !ancestor.MoveTo(input) {
@@ -32,11 +31,11 @@ func (a *ancestorQuery) Evaluate(context NodeIterator) interface{} {
 		}
 		for ancestor.MoveToParent() {
 			if a.matches(ancestor) {
-				b, ok := insertNode(a.outputBuffer, input)
+				b, ok := insertNode(a.buff, input)
 				if !ok {
 					break
 				}
-				a.outputBuffer = b
+				a.buff = b
 			}
 		}
 	}

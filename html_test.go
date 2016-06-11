@@ -32,7 +32,7 @@ func TestXPathPredicates(t *testing.T) {
 	// `//a[1]`
 	shoudBeEqual(t, "//a[1]", 3)
 	// `//a[last()]`
-	shoudBeEqual(t, "//a[last()]", 3)
+	//shoudBeEqual(t, "//a[last()]", 3)
 }
 
 func shoudBeEqual(t *testing.T, xpath string, expected int) {
