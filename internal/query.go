@@ -16,8 +16,8 @@ type QueryProps uint
 const (
 	NoneQueryProp QueryProps = iota << 1
 	PositionQueryProp
-	CountQuery
-	CachedQuery
+	CountQueryProp
+	CachedQueryProp
 	ReverseQueryProp
 	MergeQueryProp
 )

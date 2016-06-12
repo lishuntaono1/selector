@@ -47,7 +47,7 @@ var s_CompXsltE = [][]cmpXslt{
 	[]cmpXslt{cmpNumberNumber, nil, nil, nil, nil},
 	[]cmpXslt{nil, nil, nil, nil, nil},
 	[]cmpXslt{nil, nil, nil, nil, nil},
-	[]cmpXslt{nil, cmpQueryStringE, nil, nil, nil},
+	[]cmpXslt{cmpQueryNumber, cmpQueryStringE, nil, nil, nil},
 	[]cmpXslt{nil, nil, nil, nil, nil},
 }
 
@@ -55,7 +55,7 @@ var s_CompXsltO = [][]cmpXslt{
 	[]cmpXslt{cmpNumberNumber, nil, nil, nil, nil},
 	[]cmpXslt{nil, nil, nil, nil, nil},
 	[]cmpXslt{nil, nil, nil, nil, nil},
-	[]cmpXslt{nil, nil, nil, nil, nil},
+	[]cmpXslt{cmpQueryNumber, nil, nil, nil, nil},
 	[]cmpXslt{nil, nil, nil, nil, nil},
 }
 
@@ -94,6 +94,17 @@ func cmpNumberNumberF(op OpType, n1, n2 float64) bool {
 
 func cmpNumberNumber(op OpType, val1, val2 interface{}) bool {
 	return cmpNumberNumberF(op, val1.(float64), val2.(float64))
+}
+
+func cmpQueryNumber(op OpType, val1, val2 interface{}) bool {
+	n1 := &nodeSet{val1.(Query), nil}
+	n2 := val2.(float64)
+	for n1.MoveNext() {
+		if cmpNumberNumber(op, convertToXPathDouble(n1.Value()), n2) {
+			return true
+		}
+	}
+	return false
 }
 
 type nodeSet struct {

@@ -29,7 +29,7 @@ const (
 type QueryBuilder struct {
 	depth      int
 	query      string
-	firstInput Query
+	firstInput interface{}
 }
 
 var canBeNumber = func(t ResultType) bool {
@@ -68,8 +68,11 @@ func (builder *QueryBuilder) processAxis(root *Axis, flags Flags, props *Props) 
 						qyGrandInput = &ContextQuery{}
 						*props = noneProp
 					}
-					result = &DescendantQuery{
-						BaseAxisQuery: BaseAxisQuery{qyInput: qyGrandInput, matches: matches}}
+					result = &DescendantQuery{BaseAxisQuery: BaseAxisQuery{qyInput: qyGrandInput, matches: matches}}
+					if *props&nonFlatProp != 0 {
+						result = &DocumentOrderQuery{CacheOutputQuery: CacheOutputQuery{qyInput: result}}
+					}
+					*props |= nonFlatProp
 					return result
 				}
 			}
@@ -84,20 +87,18 @@ func (builder *QueryBuilder) processAxis(root *Axis, flags Flags, props *Props) 
 	}
 	switch root.axistype {
 	case AxisChild:
-		/*
-			if *props&nonFlatProp != 0 {
-				result = &cacheChildrenQuery{
-					childrenQuery: childrenQuery{qyInput: qyInput, matches: matches},
-					elementStk:    &Stack{},
-					positionStk:   &Stack{},
-					needInput:     true,
-				}
-			} else {
-		*/result = &ChildrenQuery{BaseAxisQuery: BaseAxisQuery{qyInput: qyInput, matches: matches}}
-		//}
-		//result = &childrenQuery{qyInput: qyInput, matches: matches}
+		if *props&nonFlatProp != 0 {
+			result = &CacheChildrenQuery{
+				ChildrenQuery: ChildrenQuery{BaseAxisQuery: BaseAxisQuery{qyInput: qyInput, matches: matches}},
+				elementStk:    &Stack{},
+				positionStk:   &Stack{},
+				needInput:     true,
+			}
+		} else {
+			result = &ChildrenQuery{BaseAxisQuery: BaseAxisQuery{qyInput: qyInput, matches: matches}}
+		}
 	case AxisAncestor:
-		result = &ancestorQuery{
+		result = &AncestorQuery{
 			ParentQuery: ParentQuery{
 				CacheAxisQuery: CacheAxisQuery{BaseAxisQuery: BaseAxisQuery{qyInput: qyInput, matches: matches},
 					buff: make([]xpath.Navigator, 0)},
@@ -105,7 +106,7 @@ func (builder *QueryBuilder) processAxis(root *Axis, flags Flags, props *Props) 
 		}
 		*props |= nonFlatProp
 	case AxisAncestorOrSelf:
-		result = &ancestorQuery{
+		result = &AncestorQuery{
 			ParentQuery: ParentQuery{
 				CacheAxisQuery: CacheAxisQuery{BaseAxisQuery: BaseAxisQuery{qyInput: qyInput, matches: matches},
 					buff: make([]xpath.Navigator, 0)},
@@ -118,13 +119,24 @@ func (builder *QueryBuilder) processAxis(root *Axis, flags Flags, props *Props) 
 			BaseAxisQuery: BaseAxisQuery{qyInput: qyInput, matches: matches}, // AxisQuery
 		}
 	case AxisDescendant:
-		result = &DescendantQuery{
-			BaseAxisQuery: BaseAxisQuery{qyInput: qyInput, matches: matches},
+		if flags&smartDescFlag != 0 {
+			// result = new DescendantOverDescendantQuery(qyInput, false, root.Name, root.Prefix, root.NodeType, /*abbrAxis:*/false);
+		} else {
+			result = &DescendantQuery{
+				BaseAxisQuery: BaseAxisQuery{qyInput: qyInput, matches: matches},
+			}
+			if *props&nonFlatProp != 0 {
+				result = &DocumentOrderQuery{CacheOutputQuery: CacheOutputQuery{qyInput: result}}
+			}
 		}
+
 		*props |= nonFlatProp
 	case AxisDescendantOrSelf:
 		result = &DescendantQuery{
 			BaseAxisQuery: BaseAxisQuery{qyInput: qyInput, matches: matches}, self: true}
+		if *props&nonFlatProp != 0 {
+			result = &DocumentOrderQuery{CacheOutputQuery: CacheOutputQuery{qyInput: result}}
+		}
 		*props |= nonFlatProp
 	case AxisParent:
 		result = &ParentQuery{
@@ -140,10 +152,7 @@ func (builder *QueryBuilder) processAxis(root *Axis, flags Flags, props *Props) 
 }
 
 func (builder *QueryBuilder) processFilter(root *Filter, flags Flags, props *Props) Query {
-	//var properties QueryProps
-	//properties = NoneQueryProp
-
-	//first := flags&filterFlag == 0
+	first := flags&filterFlag == 0
 
 	var propsCond Props
 	cond := builder.processNode(root.condition, noneFlag, &propsCond)
@@ -152,33 +161,81 @@ func (builder *QueryBuilder) processFilter(root *Filter, flags Flags, props *Pro
 		flags |= posFilterFlag
 	}
 	flags &= ^smartDescFlag
+
 	qyInput := builder.processNode(root.input, flags|filterFlag, props)
+
 	if root.input.Type() != FilterAst {
-		// Props.PosFilter is for nested filters only.
-		// We clean it here to avoid cleaning it in all other ast nodes.
 		*props &= ^posFilterProp
 	}
+
 	if propsCond&hasPositionProp != 0 {
-		// this condition is positional rightmost filter should be avare of this.
 		*props |= posFilterProp
 	}
 
-	/*merging predicates*/
+	qyFilter, ok := qyInput.(*FilterQuery)
+	if ok && (propsCond&hasPositionProp) == 0 && getQueryReturnType(qyFilter.cond) != AnyType {
+		prevCond := qyFilter.cond
+		if getQueryReturnType(prevCond) == NumberType {
+			prevCond = &logicalExpr{op: OpEQ, opnd1: nil, opnd2: prevCond}
+		}
+		cond = newBooleanExpr(OpAND, prevCond, cond)
+		qyInput = qyFilter.qyInput
+	}
 
-	/*
-		reverse := properties&ReverseQueryProp != 0
+	if *props&posFilterProp != 0 {
+		input, ok := qyInput.(*DocumentOrderQuery)
+		if ok {
+			qyInput = input.qyInput
+		}
+	}
+	var first_qyInput Query
 
-		if propsCond&hasPositionProp != 0 {
-			if reverse {
-				//qyInput = new ReversePositionQuery(qyInput)
-				panic("ReversePositionQuery not implemented.")
-			} else if propsCond&hasLastProp != 0 {
-				qyInput = &forwardPositionQuery{qyInput: qyInput}
+	if builder.firstInput == nil {
+		//BaseAxisQuery in reflect
+		val := reflect.Indirect(reflect.ValueOf(qyInput))
+		for {
+			if val.Type().Field(0).Name == "BaseAxisQuery" {
+				first_qyInput = qyInput
+				builder.firstInput = val.FieldByName("BaseAxisQuery").Interface()
+				break
+			} else if val.NumField() > 0 {
+				val = val.Field(0)
+			} else {
+				break
 			}
 		}
-	*/
-	//qyInput = &forwardPositionQuery{qyInput: qyInput}
 
+	}
+
+	merge := getQueryProperties(qyInput)&MergeQueryProp != 0
+	reverse := false // getQueryProperties(qyInput)&ReverseQueryProp != 0
+	if propsCond&hasPositionProp != 0 {
+		if reverse {
+			qyInput = &ReversePositionQuery{
+				ForwardPositionQuery: ForwardPositionQuery{CacheOutputQuery: CacheOutputQuery{qyInput: qyInput, buff: make([]xpath.Navigator, 0)}},
+			}
+		} else if propsCond&hasLastProp != 0 {
+			qyInput = &ForwardPositionQuery{CacheOutputQuery: CacheOutputQuery{qyInput: qyInput, buff: make([]xpath.Navigator, 0)}}
+		}
+	}
+
+	if first && builder.firstInput != nil {
+		if merge && (*props&posFilterProp) != 0 {
+			qyInput = &FilterQuery{BaseAxisQuery: BaseAxisQuery{qyInput: qyInput}, cond: cond}
+			parent := builder.firstInput.(BaseAxisQuery).qyInput
+			if reflect.TypeOf(parent) != reflect.TypeOf((*ContextQuery)(nil)) {
+				if ca, ok := first_qyInput.(*CacheChildrenQuery); ok {
+					ca.qyInput = &ContextQuery{}
+				}
+
+				builder.firstInput = nil
+				return &MergeFilterQuery{CacheOutputQuery: CacheOutputQuery{qyInput: parent}, child: qyInput}
+			}
+			builder.firstInput = nil
+			return qyInput
+		}
+		builder.firstInput = nil
+	}
 	return &FilterQuery{BaseAxisQuery: BaseAxisQuery{qyInput: qyInput}, cond: cond}
 }
 
@@ -194,13 +251,7 @@ func (builder *QueryBuilder) processOperator(root *Operator, flags Flags, props 
 	case OpLT, OpGT, OpLE, OpGE, OpEQ, OpNE:
 		return &logicalExpr{root.op, op1, op2}
 	case OpOR, OpAND:
-		if root.opnd1.ReturnType() != BooleanType {
-			//BooleanFunctions
-		}
-		if root.opnd2.ReturnType() != BooleanType {
-			// /BooleanFunctions
-		}
-		return &booleanExpr{root.op == OpOR, op1, op2}
+		return newBooleanExpr(root.op, op1, op2)
 	case OpUNION:
 		*props |= nonFlatProp
 		return &unionExpr{qy1: op1, qy2: op2}
@@ -262,6 +313,7 @@ func (builder *QueryBuilder) build(root AstNode) Query {
 }
 
 func (builder *QueryBuilder) Build(xpath string) Query {
+	builder.query = xpath
 	return builder.build(ParseXPathExpression(xpath))
 }
 
@@ -280,4 +332,26 @@ func getXPathType(v interface{}) ResultType {
 		}
 	}
 	return StringType
+}
+
+var queryReturnTypes = map[string]ResultType{}
+
+func getQueryReturnType(q Query) ResultType {
+	name := reflect.TypeOf(q).Elem().Name()
+	if val, ok := queryReturnTypes[name]; ok {
+		return val
+	}
+	return AnyType
+}
+
+var queryProperties = map[string]QueryProps{
+	"MergeFilterQuery": MergeQueryProp | CachedQueryProp | PositionQueryProp | CountQueryProp,
+}
+
+func getQueryProperties(q Query) QueryProps {
+	name := reflect.TypeOf(q).Elem().Name()
+	if prop, ok := queryProperties[name]; ok {
+		return prop
+	}
+	return MergeQueryProp
 }

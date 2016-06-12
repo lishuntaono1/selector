@@ -27,46 +27,30 @@ Features
 | Expression     | examples                                 |
 | :-------------:| :------------------------                |
 | @              | //title[@lang='en']  //*[@src]           |
-| []             | //book[1]                                |
-| last()         | // 
+| [ ]            | //book[1]                                |
+| last()         | //book[last()]                           | 
+| position()     | //book[position()=1]                     |
+| [num]          | //book[1]  /book[3]                      |
+
 
 ### Functions & Operations
-
+| Expression     | examples                                 |
+| :-------------:| :------------------------                |
+| |              | //node | //node                          |
+| +              | 6 + 4                                    |
+| -              | 6 - 4                                    |
+| *              | 6 * 4                                    |
+| div            | 8 div 4                                  |
+| =              | price=9.80                               |
+| !=             | price!=9.80                              |
+| <              | price < 9.80                             |
+| <=             | price <= 9.80                            |
+| >              | price > 9.80                             |
+| >=             | price >= 9.80                            |
+| or             | price = 9.80 or price = 9.70             |
+| and            | price > 9.00 and price < 9.90            |
+| mod            | 5 mod 2                                  |
 
 TODO
 ======
 >>>
-
-Examples
-======
-```golang
-package main
-import (
-	"fmt"
-	"strings"
-	"github.com/zhengchun/selector"
-	"golang.org/x/net/html"
-)
-func main() {
-	s := `<ul><li><a href="foo">Foo</a><a href="ball">Ball</a></li><li><a href="bar">BarBaz</a></li></ul>`
-	doc, _ := html.Parse(strings.NewReader(s))
-	var nodes = selector.SelectHtmlNodes(doc, "//a")	
-	for _, node := range nodes {
-		fmt.Println(InnerText(node))
-	}
-}
-```
-
-// functions
-
-//last
-//name
-//count
-
-`|`
-
-parent::*
-ancestor::*
-descendant-or-self::*
-
-// mod - + div

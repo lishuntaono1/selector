@@ -32,7 +32,31 @@ func TestXPathPredicates(t *testing.T) {
 	// `//a[1]`
 	shoudBeEqual(t, "//a[1]", 3)
 	// `//a[last()]`
-	//shoudBeEqual(t, "//a[last()]", 3)
+	shoudBeEqual(t, "//a[last()]", 3)
+	// `//a[position()]`
+	shoudBeEqual(t, "//a[position()=3]", 1)
+	// `//class='ball`
+	shoudBeEqual(t, "//*[@class='ball']", 1)
+
+}
+
+func TestXPathFunctions(t *testing.T) {
+	// `|`
+	shoudBeEqual(t, "//head | //body", 2)
+	// `+`
+	shoudBeEqual(t, "//a[1+2]", 1)
+	// `div`
+	shoudBeEqual(t, "//a[6 div 3]", 2)
+	// `!=`
+	shoudBeEqual(t, "//a[@href!='/running']", 5)
+	// `<=`
+	shoudBeEqual(t, "//a[@id<=3]", 3)
+	// `>`
+	shoudBeEqual(t, "//a[@id>3]", 2)
+	// `or`
+	shoudBeEqual(t, "//a[@id=1 or @id=3]", 2)
+	// `and`
+	shoudBeEqual(t, "//a[@id=1 and 1=1]", 1)
 }
 
 func shoudBeEqual(t *testing.T, xpath string, expected int) {
@@ -51,13 +75,13 @@ func init() {
     <a href="/"><img src="logo.jpg" /></a>
     <ul>
         <li class="ball">
-            <a href="/football">football</a>
-            <a href="/basketball">basketball</a>
-            <a href="/ping_pong">ping-pong</a>
+            <a id="1" href="/football">football</a>
+            <a id="2" href="/basketball">basketball</a>
+            <a id="3" href="/ping_pong">ping-pong</a>
         </li>
         <li>
-            <a href="/swiming">swiming</a>
-            <a href="/running">running</a>
+            <a id="4" href="/swiming">swiming</a>
+            <a id="5" href="/running">running</a>
         </li>
     </ul> 
     </body>

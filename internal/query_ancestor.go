@@ -2,12 +2,12 @@ package internal
 
 import "github.com/zhengchun/selector/xpath"
 
-type ancestorQuery struct {
+type AncestorQuery struct {
 	ParentQuery
 	self bool
 }
 
-func (a *ancestorQuery) Evaluate(context NodeIterator) interface{} {
+func (a *AncestorQuery) Evaluate(context NodeIterator) interface{} {
 	a.Reset()
 	a.qyInput.Evaluate(context)
 
