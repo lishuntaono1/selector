@@ -2,7 +2,7 @@ Selector
 ======
 A golang package lets you extract data from HTML/XML documents use XPath selectors,inspire by .NET XPath library.
 
-`Notes: some XPath syntax features not supported yet, so please reading the features instruction those already supported features before use.` 
+`NOTES: some XPath syntax features not supported yet, so please reading the features instruction those already supported features before use.` 
 
 *[XPath Tutorial](http://www.w3schools.com/xsl/xpath_syntax.asp)*
 
@@ -53,4 +53,3 @@ Features
 
 TODO
 ======
->>>
