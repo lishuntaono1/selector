@@ -29,7 +29,7 @@ const (
 type QueryBuilder struct {
 	depth      int
 	query      string
-	firstInput interface{}
+	firstInput *BaseAxisQuery
 }
 
 var canBeNumber = func(t ResultType) bool {
@@ -188,23 +188,15 @@ func (builder *QueryBuilder) processFilter(root *Filter, flags Flags, props *Pro
 			qyInput = input.qyInput
 		}
 	}
-	var first_qyInput Query
-
 	if builder.firstInput == nil {
 		//BaseAxisQuery in reflect
-		val := reflect.Indirect(reflect.ValueOf(qyInput))
-		for {
-			if val.Type().Field(0).Name == "BaseAxisQuery" {
-				first_qyInput = qyInput
-				builder.firstInput = val.FieldByName("BaseAxisQuery").Interface()
-				break
-			} else if val.NumField() > 0 {
-				val = val.Field(0)
-			} else {
-				break
-			}
+		val := reflect.ValueOf(qyInput)
+		if val.Kind() == reflect.Ptr {
+			val = val.Elem()
 		}
-
+		if _, ok := val.Type().FieldByName("BaseAxisQuery"); ok {
+			builder.firstInput = val.FieldByName("BaseAxisQuery").Addr().Interface().(*BaseAxisQuery)
+		}
 	}
 
 	merge := getQueryProperties(qyInput)&MergeQueryProp != 0
@@ -222,12 +214,9 @@ func (builder *QueryBuilder) processFilter(root *Filter, flags Flags, props *Pro
 	if first && builder.firstInput != nil {
 		if merge && (*props&posFilterProp) != 0 {
 			qyInput = &FilterQuery{BaseAxisQuery: BaseAxisQuery{qyInput: qyInput}, cond: cond}
-			parent := builder.firstInput.(BaseAxisQuery).qyInput
+			parent := builder.firstInput.qyInput
 			if reflect.TypeOf(parent) != reflect.TypeOf((*ContextQuery)(nil)) {
-				if ca, ok := first_qyInput.(*CacheChildrenQuery); ok {
-					ca.qyInput = &ContextQuery{}
-				}
-
+				builder.firstInput.qyInput = &ContextQuery{}
 				builder.firstInput = nil
 				return &MergeFilterQuery{CacheOutputQuery: CacheOutputQuery{qyInput: parent}, child: qyInput}
 			}
