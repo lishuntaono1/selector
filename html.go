@@ -11,38 +11,38 @@ import (
 )
 
 func SelectHtmlNodes(n *html.Node, xpath string) []*html.Node {
-	var nav = &HtmlNodeNavigator{doc: n, currnode: n, attindex: -1}
+	var nav = &htmlNodeNavigator{doc: n, currnode: n, attindex: -1}
 	iter := nav.Select(xpath)
 	nodes := make([]*html.Node, 0)
 
 	for iter.MoveNext() {
-		cur := iter.Current().(*HtmlNodeNavigator)
+		cur := iter.Current().(*htmlNodeNavigator)
 		nodes = append(nodes, cur.currnode)
 	}
 	return nodes
 }
 
 func SelectSingleHtmlNode(n *html.Node, xpath string) *html.Node {
-	var nav = &HtmlNodeNavigator{doc: n, currnode: n, attindex: -1}
+	var nav = &htmlNodeNavigator{doc: n, currnode: n, attindex: -1}
 	iter := nav.Select(xpath)
 	for iter.MoveNext() {
-		cur := iter.Current().(*HtmlNodeNavigator)
+		cur := iter.Current().(*htmlNodeNavigator)
 		return cur.currnode
 	}
 	return nil
 }
 
-type HtmlNodeNavigator struct {
+type htmlNodeNavigator struct {
 	doc      *html.Node
 	currnode *html.Node
 	attindex int
 }
 
-func (n *HtmlNodeNavigator) BaseURI() string {
+func (n *htmlNodeNavigator) BaseURI() string {
 	return ""
 }
 
-func (n *HtmlNodeNavigator) LocalName() string {
+func (n *htmlNodeNavigator) LocalName() string {
 	if n.attindex != -1 && len(n.currnode.Attr) > 0 {
 		return n.currnode.Attr[n.attindex].Key
 	} else {
@@ -50,7 +50,7 @@ func (n *HtmlNodeNavigator) LocalName() string {
 	}
 }
 
-func (n *HtmlNodeNavigator) Value() string {
+func (n *htmlNodeNavigator) Value() string {
 	switch n.currnode.Type {
 	case html.CommentNode:
 		return n.currnode.Data
@@ -68,20 +68,20 @@ func (n *HtmlNodeNavigator) Value() string {
 	}
 }
 
-func (n *HtmlNodeNavigator) Prefix() string {
+func (n *htmlNodeNavigator) Prefix() string {
 	return ""
 }
 
-func (n *HtmlNodeNavigator) Select(xpath string) xpath.NodeIterator {
+func (n *htmlNodeNavigator) Select(xpath string) xpath.NodeIterator {
 	return internal.Express(n.Clone(), xpath)
 }
 
-func (n *HtmlNodeNavigator) Clone() xpath.Navigator {
+func (n *htmlNodeNavigator) Clone() xpath.Navigator {
 	nav := *n
 	return &nav
 }
 
-func (n *HtmlNodeNavigator) ComparePosition(other xpath.Navigator) xpath.XmlNodeOrder {
+func (n *htmlNodeNavigator) ComparePosition(other xpath.Navigator) xpath.XmlNodeOrder {
 	if other == nil {
 		return xpath.XmlNodeOrderUnknown
 	}
@@ -128,8 +128,8 @@ func (n *HtmlNodeNavigator) ComparePosition(other xpath.Navigator) xpath.XmlNode
 	}
 }
 
-func (n *HtmlNodeNavigator) MoveTo(other xpath.Navigator) bool {
-	nav, ok := other.(*HtmlNodeNavigator)
+func (n *htmlNodeNavigator) MoveTo(other xpath.Navigator) bool {
+	nav, ok := other.(*htmlNodeNavigator)
 	if !ok {
 		return false
 	}
@@ -141,11 +141,11 @@ func (n *HtmlNodeNavigator) MoveTo(other xpath.Navigator) bool {
 	return false
 }
 
-func (n *HtmlNodeNavigator) MoveToRoot() {
+func (n *htmlNodeNavigator) MoveToRoot() {
 	n.currnode = n.doc
 }
 
-func (n *HtmlNodeNavigator) MoveToParent() bool {
+func (n *htmlNodeNavigator) MoveToParent() bool {
 	if n.currnode.Parent == nil {
 		return false
 	}
@@ -153,7 +153,7 @@ func (n *HtmlNodeNavigator) MoveToParent() bool {
 	return true
 }
 
-func (n *HtmlNodeNavigator) MoveToFirst() bool {
+func (n *htmlNodeNavigator) MoveToFirst() bool {
 	if n.currnode.Parent == nil {
 		return false
 	}
@@ -165,7 +165,7 @@ func (n *HtmlNodeNavigator) MoveToFirst() bool {
 	return true
 }
 
-func (n *HtmlNodeNavigator) MoveToNext() bool {
+func (n *htmlNodeNavigator) MoveToNext() bool {
 	if cur := n.currnode.NextSibling; cur == nil {
 		return false
 	} else {
@@ -174,7 +174,7 @@ func (n *HtmlNodeNavigator) MoveToNext() bool {
 	return true
 }
 
-func (n *HtmlNodeNavigator) MoveToFirstAttribute() bool {
+func (n *htmlNodeNavigator) MoveToFirstAttribute() bool {
 	if len(n.currnode.Attr) == 0 {
 		return false
 	}
@@ -182,7 +182,7 @@ func (n *HtmlNodeNavigator) MoveToFirstAttribute() bool {
 	return true
 }
 
-func (n *HtmlNodeNavigator) MoveToNextAttribute() bool {
+func (n *htmlNodeNavigator) MoveToNextAttribute() bool {
 	if n.attindex >= len(n.currnode.Attr)-1 {
 		return false
 	}
@@ -190,7 +190,7 @@ func (n *HtmlNodeNavigator) MoveToNextAttribute() bool {
 	return true
 }
 
-func (n *HtmlNodeNavigator) MoveToFirstChild() bool {
+func (n *htmlNodeNavigator) MoveToFirstChild() bool {
 	if cur := n.currnode.FirstChild; cur == nil {
 		return false
 	} else {
@@ -199,7 +199,7 @@ func (n *HtmlNodeNavigator) MoveToFirstChild() bool {
 	return true
 }
 
-func (n *HtmlNodeNavigator) NodeType() xpath.NodeType {
+func (n *htmlNodeNavigator) NodeType() xpath.NodeType {
 	switch n.currnode.Type {
 	case html.CommentNode:
 		return xpath.CommentNode
@@ -219,8 +219,8 @@ func (n *HtmlNodeNavigator) NodeType() xpath.NodeType {
 	}
 }
 
-func (n *HtmlNodeNavigator) IsSamePosition(other xpath.Navigator) bool {
-	nav, ok := other.(*HtmlNodeNavigator)
+func (n *htmlNodeNavigator) IsSamePosition(other xpath.Navigator) bool {
+	nav, ok := other.(*htmlNodeNavigator)
 	if !ok {
 		return false
 	}
