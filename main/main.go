@@ -31,6 +31,6 @@ func main() {
 
 	var nodes = selector.SelectHtmlNodes(doc, "//a[5 mod 2]")
 	for _, node := range nodes {
-		fmt.Println(selector.InnerText(node))
+		fmt.Println(selector.HtmlNodeInnerText(node))
 	}
 }

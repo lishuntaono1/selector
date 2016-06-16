@@ -3,6 +3,7 @@ package selector
 import (
 	"bytes"
 	"fmt"
+	"io"
 
 	"github.com/zhengchun/selector/internal"
 	"github.com/zhengchun/selector/xpath"
@@ -10,32 +11,66 @@ import (
 	"golang.org/x/net/html"
 )
 
-func SelectHtmlNodes(n *html.Node, xpath string) []*html.Node {
-	var nav = &htmlNodeNavigator{doc: n, currnode: n, attindex: -1}
-	iter := nav.Select(xpath)
-	nodes := make([]*html.Node, 0)
-
-	for iter.MoveNext() {
-		cur := iter.Current().(*htmlNodeNavigator)
-		nodes = append(nodes, cur.currnode)
-	}
-	return nodes
-}
-
-func SelectSingleHtmlNode(n *html.Node, xpath string) *html.Node {
-	var nav = &htmlNodeNavigator{doc: n, currnode: n, attindex: -1}
-	iter := nav.Select(xpath)
-	for iter.MoveNext() {
-		cur := iter.Current().(*htmlNodeNavigator)
-		return cur.currnode
-	}
-	return nil
-}
-
 type htmlNodeNavigator struct {
 	doc      *html.Node
 	currnode *html.Node
 	attindex int
+}
+
+func getDepth(nav xpath.Navigator) int {
+	depth := 0
+	for nav.MoveToParent() {
+		depth++
+	}
+	return depth
+}
+
+func compareSiblings(n1, n2 xpath.Navigator) xpath.XmlNodeOrder {
+	var cmp = 0
+	switch n1.NodeType() {
+	case xpath.NamespaceNode:
+		break
+	case xpath.AttributeNode:
+		cmp += 1
+	default:
+		cmp += 2
+	}
+	switch n2.NodeType() {
+	case xpath.NamespaceNode:
+		if cmp == 0 {
+			//not supported NamespaceNode.
+
+			/*for n1.MoveToNextNamespace() {
+				if n1.IsSamePosition(n2) {
+					return XmlNodeOrderBefore
+				}
+			}*/
+		}
+	case xpath.AttributeNode:
+		cmp -= 1
+		if cmp == 0 {
+			for n1.MoveToNextAttribute() {
+				if n1.IsSamePosition(n2) {
+					return xpath.XmlNodeOrderBefore
+				}
+			}
+		}
+	default:
+		cmp -= 2
+		if cmp == 0 {
+			for n1.MoveToNext() {
+				if n1.IsSamePosition(n2) {
+					return xpath.XmlNodeOrderBefore
+				}
+			}
+		}
+		break
+	}
+	if cmp < 0 {
+		return xpath.XmlNodeOrderBefore
+	} else {
+		return xpath.XmlNodeOrderAfter
+	}
 }
 
 func (n *htmlNodeNavigator) BaseURI() string {
@@ -60,7 +95,7 @@ func (n *htmlNodeNavigator) Value() string {
 		if n.attindex != -1 {
 			return n.currnode.Attr[n.attindex].Val
 		}
-		return InnerText(n.currnode)
+		return HtmlNodeInnerText(n.currnode)
 	case html.TextNode:
 		return n.currnode.Data
 	default:
@@ -227,7 +262,7 @@ func (n *htmlNodeNavigator) IsSamePosition(other xpath.Navigator) bool {
 	return n.currnode == nav.currnode
 }
 
-func InnerText(n *html.Node) string {
+func HtmlNodeInnerText(n *html.Node) string {
 	var b bytes.Buffer
 	var output func(*html.Node)
 	output = func(node *html.Node) {
@@ -242,58 +277,32 @@ func InnerText(n *html.Node) string {
 	return b.String()
 }
 
-func getDepth(nav xpath.Navigator) int {
-	depth := 0
-	for nav.MoveToParent() {
-		depth++
+func SelectHtmlNodes(n *html.Node, xpath string) []*html.Node {
+	var nav = &htmlNodeNavigator{doc: n, currnode: n, attindex: -1}
+	iter := nav.Select(xpath)
+	nodes := make([]*html.Node, 0)
+
+	for iter.MoveNext() {
+		cur := iter.Current().(*htmlNodeNavigator)
+		nodes = append(nodes, cur.currnode)
 	}
-	return depth
+	return nodes
 }
 
-func compareSiblings(n1, n2 xpath.Navigator) xpath.XmlNodeOrder {
-	var cmp = 0
-	switch n1.NodeType() {
-	case xpath.NamespaceNode:
-		break
-	case xpath.AttributeNode:
-		cmp += 1
-	default:
-		cmp += 2
+func SelectSingleHtmlNode(n *html.Node, xpath string) *html.Node {
+	var nav = &htmlNodeNavigator{doc: n, currnode: n, attindex: -1}
+	iter := nav.Select(xpath)
+	for iter.MoveNext() {
+		cur := iter.Current().(*htmlNodeNavigator)
+		return cur.currnode
 	}
-	switch n2.NodeType() {
-	case xpath.NamespaceNode:
-		if cmp == 0 {
-			//not supported NamespaceNode.
+	return nil
+}
 
-			/*for n1.MoveToNextNamespace() {
-				if n1.IsSamePosition(n2) {
-					return XmlNodeOrderBefore
-				}
-			}*/
-		}
-	case xpath.AttributeNode:
-		cmp -= 1
-		if cmp == 0 {
-			for n1.MoveToNextAttribute() {
-				if n1.IsSamePosition(n2) {
-					return xpath.XmlNodeOrderBefore
-				}
-			}
-		}
-	default:
-		cmp -= 2
-		if cmp == 0 {
-			for n1.MoveToNext() {
-				if n1.IsSamePosition(n2) {
-					return xpath.XmlNodeOrderBefore
-				}
-			}
-		}
-		break
+func ParseHtml(r io.Reader) (*html.Node, error) {
+	doc, err := html.Parse(r)
+	if err != nil {
+		return nil, err
 	}
-	if cmp < 0 {
-		return xpath.XmlNodeOrderBefore
-	} else {
-		return xpath.XmlNodeOrderAfter
-	}
+	return doc, nil
 }
