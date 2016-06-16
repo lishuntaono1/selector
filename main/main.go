@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/zhengchun/selector"
-	"golang.org/x/net/html"
 )
 
 func main() {
@@ -27,8 +26,7 @@ func main() {
     </ul> 
     </body>
     </html>`
-	doc, _ := html.Parse(strings.NewReader(s))
-
+	doc, _ := selector.ParseHtml(strings.NewReader(s))
 	var nodes = selector.SelectHtmlNodes(doc, "//a[5 mod 2]")
 	for _, node := range nodes {
 		fmt.Println(selector.HtmlNodeInnerText(node))
