@@ -1,3 +1,5 @@
+### This package is deprecated,and has move new project [gxpath](https://github.com/antchfx/gxpath) and [xquery](https://github.com/antchfx/xquery).
+
 Selector
 ======
 A golang package lets you extract data from HTML/XML documents use XPath selectors,inspire by .NET XPath library.
