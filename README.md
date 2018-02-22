@@ -1,4 +1,4 @@
-### This package is deprecated,and has move new project [gxpath](https://github.com/antchfx/gxpath) and [xquery](https://github.com/antchfx/xquery).
+### This package is deprecated, you can browse this new project [XPath](https://github.com/antchfx/xpath).
 
 Selector
 ======
